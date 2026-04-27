@@ -14,8 +14,8 @@ https://github.com/Cdower/hassio-addons
 
 ## Add-ons
 
-| Add-on | Description | Docs |
-| ------ | ----------- | ---- |
+| Add-on                    | Description                                                               | Docs                                                                              |
+| ------------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | **Calibre-Web Automated** | Self-hosted ebook library with automatic ingest, conversion, and metadata | [README](calibre-web-automated/README.md) · [DOCS](calibre-web-automated/DOCS.md) |
 
 ## Support
