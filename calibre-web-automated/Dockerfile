@@ -1,5 +1,5 @@
-ARG BUILD_FROM
-FROM ${BUILD_FROM:-crocodilestick/calibre-web-automated:v4.0.6}
+ARG BUILD_FROM="crocodilestick/calibre-web-automated:v4.0.6"
+FROM ${BUILD_FROM}
 
 ARG BUILD_ARCH
 ARG BUILD_DATE
@@ -14,6 +14,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # Install bashio so init scripts can use bashio::config / bashio::log.
 # Upstream image is Ubuntu Noble (LSIO base) — jq is already present but pin it.
 ARG BASHIO_VERSION="0.16.2"
+# hadolint ignore=DL3008
 RUN \
     apt-get update \
     && apt-get install -y --no-install-recommends \
