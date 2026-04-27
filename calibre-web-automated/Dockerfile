@@ -1,5 +1,5 @@
 ARG BUILD_FROM
-FROM ${BUILD_FROM}
+FROM ${BUILD_FROM:-crocodilestick/calibre-web-automated:v4.0.6}
 
 ARG BUILD_ARCH
 ARG BUILD_DATE
