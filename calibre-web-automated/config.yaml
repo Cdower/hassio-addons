@@ -1,6 +1,7 @@
 ---
 name: Calibre-Web Automated
-version: "4.0.6"
+# version: "4.0.6"
+version: "dev"
 slug: calibre-web-automated
 description: Self-hosted ebook library with automatic ingest, conversion, and metadata
 url: https://github.com/Cdower/hassio-addons/tree/main/calibre-web-automated
@@ -8,8 +9,6 @@ arch:
   - amd64
   - aarch64
 init: false
-startup: application
-boot: auto
 ingress: true
 ingress_port: 8083
 panel_icon: mdi:book-open-page-variant
@@ -21,9 +20,6 @@ map:
   - share:rw
   - media:rw
   - addon_config:rw
-hassio_api: false
-homeassistant_api: false
-host_network: false
 image: ghcr.io/cdower/{arch}-hassio-addon-calibre-web-automated
 options:
   library_path: /share/calibre/library
