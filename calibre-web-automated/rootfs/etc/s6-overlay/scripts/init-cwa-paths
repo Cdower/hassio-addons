@@ -1,0 +1,49 @@
+#!/command/with-contenv bashio
+# ==============================================================================
+# Translate HA add-on options into the paths and env vars CWA expects.
+# Runs as a oneshot before upstream's cwa-init service.
+# ==============================================================================
+set -e
+
+LIBRARY_PATH=$(bashio::config 'library_path')
+INGEST_PATH=$(bashio::config 'ingest_path')
+PLUGINS_PATH=$(bashio::config 'plugins_path')
+
+bashio::log.info "Configuring CWA paths..."
+mkdir -p "${LIBRARY_PATH}" "${INGEST_PATH}"
+
+# CWA's image hardcodes /config; we want persistent state in HA's /data so it
+# survives add-on upgrades. Seed /data from the image's /config on first boot,
+# then pivot /config -> /data.
+if ! bashio::fs.file_exists '/data/.cwa-initialized'; then
+    bashio::log.info "First boot — seeding /data from image's /config"
+    if [ -d /config ] && [ -n "$(ls -A /config 2>/dev/null || true)" ]; then
+        cp -an /config/. /data/
+    fi
+    touch /data/.cwa-initialized
+fi
+rm -rf /config
+ln -sfn /data /config
+
+ln -sfn "${LIBRARY_PATH}" /calibre-library
+ln -sfn "${INGEST_PATH}" /cwa-book-ingest
+
+mkdir -p /config/.config/calibre
+if bashio::var.has_value "${PLUGINS_PATH}"; then
+    ln -sfn "${PLUGINS_PATH}" /config/.config/calibre/plugins
+    if [ ! -f /config/.config/calibre/customize.py.json ]; then
+        bashio::log.warning \
+            "plugins_path is set but customize.py.json is missing at /config/.config/calibre/. Plugins will not register until you place it there."
+    fi
+fi
+
+# Surface options as env vars for downstream s6-rc longruns. The /run/s6/container_environment
+# directory is read by `with-contenv` for every service started after this oneshot.
+mkdir -p /run/s6/container_environment
+echo -n "$(bashio::config 'network_share_mode')" > /run/s6/container_environment/NETWORK_SHARE_MODE
+echo -n "$(bashio::config 'hardcover_token')"    > /run/s6/container_environment/HARDCOVER_TOKEN
+echo -n "$(bashio::config 'trusted_proxy_count')" > /run/s6/container_environment/TRUSTED_PROXY_COUNT
+TZ_VALUE=$(bashio::config 'TZ' "$(bashio::supervisor.timezone)")
+echo -n "${TZ_VALUE}" > /run/s6/container_environment/TZ
+
+bashio::log.info "CWA paths ready: library=${LIBRARY_PATH}, ingest=${INGEST_PATH}"

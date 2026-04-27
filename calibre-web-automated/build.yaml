@@ -1,0 +1,9 @@
+---
+build_from:
+  amd64: crocodilestick/calibre-web-automated:v4.0.6
+  aarch64: crocodilestick/calibre-web-automated:v4.0.6
+labels:
+  org.opencontainers.image.title: Calibre-Web Automated
+  org.opencontainers.image.licenses: GPL-3.0
+  org.opencontainers.image.source: https://github.com/Cdower/hassio-addons
+  org.opencontainers.image.documentation: https://github.com/Cdower/hassio-addons/tree/main/calibre-web-automated
