@@ -1,0 +1,123 @@
+---
+name: Deploy
+
+# yamllint disable-line rule:truthy
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version override (defaults to config.yaml version)
+        required: false
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  information:
+    name: Gather addon information
+    runs-on: ubuntu-latest
+    outputs:
+      architectures: ${{ steps.info.outputs.architectures }}
+      build: ${{ steps.info.outputs.build }}
+      description: ${{ steps.info.outputs.description }}
+      name: ${{ steps.info.outputs.name }}
+      slug: ${{ steps.info.outputs.slug }}
+      target: ${{ steps.info.outputs.target }}
+      version: ${{ steps.version.outputs.version }}
+      owner: ${{ steps.owner.outputs.owner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Read addon information
+        id: info
+        uses: frenck/action-addon-information@ce1377e9851cf569c29329e65fb2c57e67ca0f69  # v1.4.2
+      - name: Resolve version
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          TAG_NAME: ${{ github.event.release.tag_name }}
+          ADDON_VERSION: ${{ steps.info.outputs.version }}
+        run: |
+          if [[ -n "${INPUT_VERSION}" ]]; then
+            v="${INPUT_VERSION}"
+          elif [[ -n "${TAG_NAME}" ]]; then
+            v="${TAG_NAME#v}"
+          else
+            v="${ADDON_VERSION}"
+          fi
+          echo "version=${v}" >> "$GITHUB_OUTPUT"
+      - name: Lowercase repo owner
+        id: owner
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          echo "owner=${OWNER,,}" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    name: Build & push (${{ matrix.architecture }})
+    needs: information
+    permissions:
+      contents: read
+      packages: write
+    runs-on: ${{ matrix.architecture == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture: ${{ fromJson(needs.information.outputs.architectures) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
+      - name: Compose build flags
+        id: flags
+        env:
+          ARCHITECTURE: ${{ matrix.architecture }}
+          BUILD_FILE: ${{ needs.information.outputs.build }}
+        run: |
+          echo "date=$(date +"%Y-%m-%dT%H:%M:%SZ")" >> "$GITHUB_OUTPUT"
+          from=$(yq --no-colors eval ".build_from.${ARCHITECTURE}" "${BUILD_FILE}")
+          echo "from=${from}" >> "$GITHUB_OUTPUT"
+          case "${ARCHITECTURE}" in
+            amd64)   echo "platform=linux/amd64"    >> "$GITHUB_OUTPUT" ;;
+            aarch64) echo "platform=linux/arm64/v8" >> "$GITHUB_OUTPUT" ;;
+            *) echo "::error::Unsupported architecture ${ARCHITECTURE}"; exit 1 ;;
+          esac
+      - name: Login to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121  # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build & push
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f  # v7.1.0
+        with:
+          push: true
+          tags: |
+            ghcr.io/${{ needs.information.outputs.owner }}/${{ matrix.architecture }}-hassio-addon-${{ needs.information.outputs.slug }}:${{ needs.information.outputs.version }}
+            ghcr.io/${{ needs.information.outputs.owner }}/${{ matrix.architecture }}-hassio-addon-${{ needs.information.outputs.slug }}:latest
+          context: ${{ needs.information.outputs.target }}
+          file: ${{ needs.information.outputs.target }}/Dockerfile
+          platforms: ${{ steps.flags.outputs.platform }}
+          cache-from: type=gha,scope=${{ matrix.architecture }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.architecture }}
+          build-args: |
+            BUILD_ARCH=${{ matrix.architecture }}
+            BUILD_DATE=${{ steps.flags.outputs.date }}
+            BUILD_DESCRIPTION=${{ needs.information.outputs.description }}
+            BUILD_FROM=${{ steps.flags.outputs.from }}
+            BUILD_NAME=${{ needs.information.outputs.name }}
+            BUILD_REF=${{ github.sha }}
+            BUILD_REPOSITORY=${{ github.repository }}
+            BUILD_VERSION=${{ needs.information.outputs.version }}
