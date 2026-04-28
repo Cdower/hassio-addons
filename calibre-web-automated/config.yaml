@@ -19,7 +19,6 @@ ports_description:
 map:
   - share:rw
   - media:rw
-  - addon_config:rw
 image: ghcr.io/cdower/{arch}-hassio-addon-calibre-web-automated
 options:
   library_path: /share/calibre/library
