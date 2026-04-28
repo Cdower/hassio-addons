@@ -8,15 +8,15 @@
 
 ## Configuration options
 
-| Option | Default | Description |
-| ------ | ------- | ----------- |
-| `library_path` | `/share/calibre/library` | Where the Calibre library (`metadata.db` + book folders) lives. |
-| `ingest_path` | `/share/calibre/ingest` | Drop EPUB/PDF/MOBI/etc. here for automatic ingest. Files are deleted after processing. |
-| `plugins_path` | *(empty)* | Optional Calibre plugins folder. See "Plugins" below. |
-| `network_share_mode` | `false` | Set `true` when the library lives on NFS/SMB. Disables WAL and switches to polling. |
-| `hardcover_token` | *(empty)* | API token for [Hardcover](https://hardcover.app) metadata enrichment. |
-| `trusted_proxy_count` | `1` | Number of reverse proxies in front of CWA. `1` covers HA Ingress. Increase to `2` if you front HA with Cloudflare/nginx. |
-| `log_level` | `info` | One of `trace`, `debug`, `info`, `notice`, `warning`, `error`, `fatal`. |
+| Option                | Default                  | Description                                                                                                              |
+| --------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `library_path`        | `/share/calibre/library` | Where the Calibre library (`metadata.db` + book folders) lives.                                                          |
+| `ingest_path`         | `/share/calibre/ingest`  | Drop EPUB/PDF/MOBI/etc. here for automatic ingest. Files are deleted after processing.                                   |
+| `plugins_path`        | _(empty)_                | Optional Calibre plugins folder. See "Plugins" below.                                                                    |
+| `network_share_mode`  | `false`                  | Set `true` when the library lives on NFS/SMB. Disables WAL and switches to polling.                                      |
+| `hardcover_token`     | _(empty)_                | API token for [Hardcover](https://hardcover.app) metadata enrichment.                                                    |
+| `trusted_proxy_count` | `1`                      | Number of reverse proxies in front of CWA. `1` covers HA Ingress. Increase to `2` if you front HA with Cloudflare/nginx. |
+| `log_level`           | `info`                   | One of `trace`, `debug`, `info`, `notice`, `warning`, `error`, `fatal`.                                                  |
 
 ## Setup paths
 
