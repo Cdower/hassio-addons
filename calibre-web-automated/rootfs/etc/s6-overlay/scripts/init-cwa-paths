@@ -33,20 +33,36 @@ bind_user_path() {
     fi
 }
 
+# Validate user-supplied paths up front. library_path and ingest_path are
+# required by the schema; config_path and plugins_path are optional. All
+# must be absolute since they are used as mkdir / bind-mount sources, and
+# config_path must not collide with /config itself.
+if ! bashio::var.has_value "${LIBRARY_PATH}"; then
+    bashio::exit.nok "library_path must not be empty"
+elif [[ "${LIBRARY_PATH}" != /* ]]; then
+    bashio::exit.nok "library_path must be an absolute path (got: ${LIBRARY_PATH})"
+fi
+if ! bashio::var.has_value "${INGEST_PATH}"; then
+    bashio::exit.nok "ingest_path must not be empty"
+elif [[ "${INGEST_PATH}" != /* ]]; then
+    bashio::exit.nok "ingest_path must be an absolute path (got: ${INGEST_PATH})"
+fi
+if bashio::var.has_value "${CONFIG_PATH}"; then
+    if [[ "${CONFIG_PATH}" != /* ]]; then
+        bashio::exit.nok "config_path must be an absolute path (got: ${CONFIG_PATH})"
+    fi
+    # Must not be /config or anything under /config/ to avoid seeding /config
+    # onto itself and then removing it.
+    if [ "${CONFIG_PATH}" = "/config" ] || [[ "${CONFIG_PATH}" == /config/* ]]; then
+        bashio::exit.nok "config_path must not be /config or a path under /config/ (got: ${CONFIG_PATH})"
+    fi
+fi
+
 # /config: default to /data so persistent state survives add-on upgrades. If
 # the user set config_path (e.g. /share/nas/calibre/config), use that so
 # /config can live on a network share. Pair a network-share target with
 # network_share_mode: true so SQLite WAL is disabled on app.db.
 if bashio::var.has_value "${CONFIG_PATH}"; then
-    # Validate: must be an absolute path.
-    if [[ "${CONFIG_PATH}" != /* ]]; then
-        bashio::exit.nok "config_path must be an absolute path (got: ${CONFIG_PATH})"
-    fi
-    # Validate: must not be /config or anything under /config/ to avoid
-    # seeding /config onto itself and then removing it.
-    if [ "${CONFIG_PATH}" = "/config" ] || [[ "${CONFIG_PATH}" == /config/* ]]; then
-        bashio::exit.nok "config_path must not be /config or a path under /config/ (got: ${CONFIG_PATH})"
-    fi
     CWA_CONFIG_TARGET="${CONFIG_PATH}"
     bashio::log.info "Using user-provided config_path: ${CWA_CONFIG_TARGET}"
 else
@@ -68,23 +84,7 @@ if ! bashio::fs.file_exists "${CWA_CONFIG_TARGET}/.cwa-initialized"; then
     fi
     touch "${CWA_CONFIG_TARGET}/.cwa-initialized"
 fi
-if [ "$(stat -c %d /config)" != "$(stat -c %d "${CWA_CONFIG_TARGET}")" ]; then
-    mount --bind "${CWA_CONFIG_TARGET}" /config
-fi
-
-# Validate library_path and ingest_path are non-empty absolute paths before
-# using them as bind-mount sources. An empty or relative value would cause
-# mkdir -p / mount --bind to act on an unintended path.
-if ! bashio::var.has_value "${LIBRARY_PATH}"; then
-    bashio::exit.nok "library_path must not be empty"
-elif [[ "${LIBRARY_PATH}" != /* ]]; then
-    bashio::exit.nok "library_path must be an absolute path (got: ${LIBRARY_PATH})"
-fi
-if ! bashio::var.has_value "${INGEST_PATH}"; then
-    bashio::exit.nok "ingest_path must not be empty"
-elif [[ "${INGEST_PATH}" != /* ]]; then
-    bashio::exit.nok "ingest_path must be an absolute path (got: ${INGEST_PATH})"
-fi
+bind_user_path "${CWA_CONFIG_TARGET}" /config
 
 bind_user_path "${LIBRARY_PATH}" /calibre-library
 bind_user_path "${INGEST_PATH}" /cwa-book-ingest
