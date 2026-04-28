@@ -24,6 +24,7 @@ image: ghcr.io/cdower/{arch}-hassio-addon-calibre-web-automated
 options:
   library_path: /share/calibre/library
   ingest_path: /share/calibre/ingest
+  config_path: ""
   plugins_path: ""
   network_share_mode: false
   hardcover_token: ""
@@ -32,6 +33,7 @@ options:
 schema:
   library_path: str
   ingest_path: str
+  config_path: str?
   plugins_path: str?
   network_share_mode: bool
   hardcover_token: password?
