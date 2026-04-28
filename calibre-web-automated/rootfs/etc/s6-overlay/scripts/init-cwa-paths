@@ -129,6 +129,7 @@ TZ_VALUE=$(bashio::supervisor.timezone 2>/dev/null || true)
 if [ -z "${TZ_VALUE}" ] || [ "${TZ_VALUE}" = "null" ]; then
     TZ_VALUE="UTC"
 fi
+bashio::log.info "Setting TZ environment variable to ${TZ_VALUE}"
 echo -n "${TZ_VALUE}" > /run/s6/container_environment/TZ
 
 bashio::log.info "CWA paths ready: library=${LIBRARY_PATH}, ingest=${INGEST_PATH}"
