@@ -38,7 +38,7 @@ Leave the defaults. The add-on creates `/share/calibre/library` and `/share/cali
    - Stop your old container.
    - Copy `metadata.db` and the book folders to the new `library_path`.
    - To preserve user accounts and CWA's app database, you have two options:
-     - **HA-local `/config`** (default): the add-on keeps `/config` on its private `/data` directory, which isn't reachable from Samba. Either set `config_path` to a `/share/...` path so you can copy files in directly, or use the SSH/Terminal add-on and copy your old CWA `/config` contents into `/data` (path inside this add-on's container).
+     - **Add-on-local `/data`-backed `/config`** (default): the add-on keeps `/config` on its private `/data` directory, which isn't reachable from Samba. Either set `config_path` to a `/share/...` path so you can copy files in directly, or use the SSH/Terminal add-on and copy your old CWA `/config` contents into `/data` (path inside this add-on's container).
      - **Network-share `/config`**: copy your old CWA `/config` contents into the directory you set as `config_path` (e.g. `/share/nas/calibre/config`).
    - Delete the sentinel from wherever `/config` lives: `rm <config_path>/.cwa-initialized` (or `rm /data/.cwa-initialized` for the default) so the add-on doesn't think it's already initialized.
    - Restart the add-on.
