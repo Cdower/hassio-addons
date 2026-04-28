@@ -5,6 +5,12 @@ All notable changes to this add-on will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `config_path` option to host CWA's `/config` (app database, user accounts, settings) on a network share. Empty (default) keeps `/config` on HA's local `/data` as before; pair a `/share/...` value with `network_share_mode: true` so SQLite WAL is disabled on `app.db`.
+
 ## [4.0.6] - 2026-04-27
 
 ### Added
