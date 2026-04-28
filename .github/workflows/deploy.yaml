@@ -85,10 +85,12 @@ jobs:
         env:
           ARCHITECTURE: ${{ matrix.architecture }}
           BUILD_FILE: ${{ needs.information.outputs.build }}
+          TARGET: ${{ needs.information.outputs.target }}
         run: |
           echo "date=$(date +"%Y-%m-%dT%H:%M:%SZ")" >> "$GITHUB_OUTPUT"
           from=$(yq --no-colors eval ".build_from.${ARCHITECTURE}" "${BUILD_FILE}")
           echo "from=${from}" >> "$GITHUB_OUTPUT"
+          echo "target=${TARGET}" >> "$GITHUB_OUTPUT"
           case "${ARCHITECTURE}" in
             amd64)   echo "platform=linux/amd64"    >> "$GITHUB_OUTPUT" ;;
             aarch64) echo "platform=linux/arm64/v8" >> "$GITHUB_OUTPUT" ;;
@@ -107,8 +109,8 @@ jobs:
           tags: |
             ghcr.io/${{ needs.information.outputs.owner }}/${{ matrix.architecture }}-hassio-addon-${{ needs.information.outputs.slug }}:${{ needs.information.outputs.version }}
             ghcr.io/${{ needs.information.outputs.owner }}/${{ matrix.architecture }}-hassio-addon-${{ needs.information.outputs.slug }}:latest
-          context: ${{ needs.information.outputs.target }}
-          file: ${{ needs.information.outputs.target }}/Dockerfile
+          context: ${{ steps.flags.outputs.target }}
+          file: ${{ steps.flags.outputs.target }}/Dockerfile
           platforms: ${{ steps.flags.outputs.platform }}
           cache-from: type=gha,scope=${{ matrix.architecture }}
           cache-to: type=gha,mode=max,scope=${{ matrix.architecture }}
