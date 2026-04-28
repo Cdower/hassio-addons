@@ -13,11 +13,13 @@ PLUGINS_PATH=$(bashio::config 'plugins_path')
 bashio::log.info "Configuring CWA paths..."
 mkdir -p "${LIBRARY_PATH}" "${INGEST_PATH}"
 
-# CWA's image hardcodes /config; we want persistent state on a writable path
-# that survives add-on upgrades. Default to /data; if the user set
-# config_path (e.g. /share/nas/calibre/config), use that so /config can live
-# on a network share. Pair a network-share target with network_share_mode:
-# true so SQLite WAL is disabled on app.db.
+# CWA's image hardcodes /config and declares it as a Docker VOLUME, so it's
+# always a mount point at runtime and can't be replaced with a symlink. We
+# bind-mount a writable target over /config instead so persistent state
+# survives add-on upgrades. Default to /data; if the user set config_path
+# (e.g. /share/nas/calibre/config), use that so /config can live on a
+# network share. Pair a network-share target with network_share_mode: true
+# so SQLite WAL is disabled on app.db.
 if bashio::var.has_value "${CONFIG_PATH}"; then
     # Validate: must be an absolute path.
     if [[ "${CONFIG_PATH}" != /* ]]; then
@@ -36,11 +38,12 @@ fi
 mkdir -p "${CWA_CONFIG_TARGET}"
 
 # Seed the persistent target from the current contents of /config on first
-# use. On a brand-new install that's the image defaults; on a later run (e.g.
-# after switching config_path) /config is already a symlink to the previous
-# persistent target, so the new target gets a copy of that. The sentinel
-# lives next to the data so a freshly-mounted target is seeded even if /data
-# has already been initialized on a previous run.
+# use. This must run before the bind mount below: at this point /config is
+# the upstream image's default contents (on a brand-new install) or the
+# previous bind-mount target (on a later run after switching config_path),
+# so the new target gets the right starting state either way. The sentinel
+# lives next to the data so a freshly-mounted target is seeded even if
+# /data has already been initialized on a previous run.
 if ! bashio::fs.file_exists "${CWA_CONFIG_TARGET}/.cwa-initialized"; then
     bashio::log.info "First use of ${CWA_CONFIG_TARGET} — seeding from current /config contents"
     if [ -d /config ] && [ -n "$(ls -A /config 2>/dev/null || true)" ]; then
@@ -48,8 +51,10 @@ if ! bashio::fs.file_exists "${CWA_CONFIG_TARGET}/.cwa-initialized"; then
     fi
     touch "${CWA_CONFIG_TARGET}/.cwa-initialized"
 fi
-rm -rf /config
-ln -sfn "${CWA_CONFIG_TARGET}" /config
+# Idempotent: skip if /config is already on the same device as the target.
+if [ "$(stat -c %d /config)" != "$(stat -c %d "${CWA_CONFIG_TARGET}")" ]; then
+    mount --bind "${CWA_CONFIG_TARGET}" /config
+fi
 
 ln -sfn "${LIBRARY_PATH}" /calibre-library
 ln -sfn "${INGEST_PATH}" /cwa-book-ingest

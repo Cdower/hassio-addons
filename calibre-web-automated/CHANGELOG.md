@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Startup failure `rm: cannot remove '/config': Device or resource busy` when the add-on tried to pivot `/config` onto `/data` (or `config_path`). `/config` was a mount point because of `addon_config:rw` in the map, so `rm -rf /config` could never succeed. Dropped `addon_config:rw` since `/data` is already persistent for HA add-ons and is the actual pivot target.
+- Startup failure `rm: cannot remove '/config': Device or resource busy`. Root cause: the upstream image declares `VOLUME /config`, so `/config` is always a Docker mount point at runtime and `rm -rf /config` (used to replace it with a symlink) cannot succeed. The init script now bind-mounts the target (`/data` or `config_path`) over `/config`, which requires `privileged: [SYS_ADMIN]` and `apparmor: false` — Home Assistant flags add-ons with elevated capabilities, but they still run.
 
 ## [4.0.6] - 2026-04-27
 

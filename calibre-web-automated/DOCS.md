@@ -59,6 +59,8 @@ If you set `plugins_path`, you also need a `customize.py.json` file at `/config/
 
 By default the add-on stores CWA's app database, user accounts, and settings in HA's per-add-on `/data` directory, which survives add-on upgrades and uninstalls. Set `config_path` to relocate that state to a `/share/...` path (typically a NAS mount) — useful if you want the CWA config on the same share as the library, or shared with another CWA instance. Library files in `library_path` (e.g. under `/share`) are always independent of the add-on lifecycle.
 
+This add-on uses `privileged: [SYS_ADMIN]` and `apparmor: false` to bind-mount your chosen `/config` path over the upstream image's `VOLUME /config`. Home Assistant marks add-ons with elevated capabilities — that's expected here.
+
 ## Upgrades
 
 When upstream releases a new version:
