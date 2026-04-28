@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `config_path` option to host CWA's `/config` (app database, user accounts, settings) on a network share. Empty (default) keeps `/config` on HA's local `/data` as before; pair a `/share/...` value with `network_share_mode: true` so SQLite WAL is disabled on `app.db`.
 
+### Fixed
+
+- Startup failure `rm: cannot remove '/config': Device or resource busy` when the add-on tried to pivot `/config` onto `/data` (or `config_path`). `/config` was a mount point because of `addon_config:rw` in the map, so `rm -rf /config` could never succeed. Dropped `addon_config:rw` since `/data` is already persistent for HA add-ons and is the actual pivot target.
+
 ## [4.0.6] - 2026-04-27
 
 ### Added
