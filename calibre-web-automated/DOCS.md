@@ -43,7 +43,7 @@ Leave the defaults. The add-on creates `/share/calibre/library` and `/share/cali
    - Delete the sentinel from wherever `/config` lives: `rm <config_path>/.cwa-initialized` (or `rm /addon_configs/.../.cwa-initialized` for the default) so the add-on doesn't think it's already initialized.
    - Restart the add-on.
 
-> Switching `config_path` after the add-on has run reseeds the new target from the image on first boot. Copy your old `/config` contents into the new target *before* restarting if you want to keep your accounts and settings.
+> Switching `config_path` after the add-on has run reseeds the new target from whatever `/config` points to at startup. On a brand-new install that's the image defaults; on an existing install it's typically your previous persistent `/config`. If the config you want to keep is *not* what `/config` points to when the add-on starts, copy it into the new target manually *before* restarting.
 
 ## Plugins (`customize.py.json` gotcha)
 

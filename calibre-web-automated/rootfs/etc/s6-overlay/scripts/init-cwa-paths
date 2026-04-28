@@ -35,11 +35,14 @@ else
 fi
 mkdir -p "${CWA_CONFIG_TARGET}"
 
-# Seed the persistent target from the image's baked-in /config on first boot.
-# The sentinel lives next to the data so a freshly-mounted target is seeded
-# even if /data has already been initialized on a previous run.
+# Seed the persistent target from the current contents of /config on first
+# use. On a brand-new install that's the image defaults; on a later run (e.g.
+# after switching config_path) /config is already a symlink to the previous
+# persistent target, so the new target gets a copy of that. The sentinel
+# lives next to the data so a freshly-mounted target is seeded even if /data
+# has already been initialized on a previous run.
 if ! bashio::fs.file_exists "${CWA_CONFIG_TARGET}/.cwa-initialized"; then
-    bashio::log.info "First boot — seeding ${CWA_CONFIG_TARGET} from image's /config"
+    bashio::log.info "First use of ${CWA_CONFIG_TARGET} — seeding from current /config contents"
     if [ -d /config ] && [ -n "$(ls -A /config 2>/dev/null || true)" ]; then
         cp -an /config/. "${CWA_CONFIG_TARGET}/"
     fi
