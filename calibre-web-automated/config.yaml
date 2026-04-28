@@ -1,6 +1,6 @@
 ---
 name: Calibre-Web Automated
-version: "4.0.6.1"
+version: "4.0.6.2"
 # version: "dev"
 slug: calibre-web-automated
 description: Self-hosted ebook library with automatic ingest, conversion, and metadata
@@ -19,6 +19,9 @@ ports_description:
 map:
   - share:rw
   - media:rw
+privileged:
+  - SYS_ADMIN
+apparmor: false
 image: ghcr.io/cdower/{arch}-hassio-addon-calibre-web-automated
 options:
   library_path: /share/calibre/calibre-library
