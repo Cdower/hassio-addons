@@ -11,25 +11,58 @@ CONFIG_PATH=$(bashio::config 'config_path')
 PLUGINS_PATH=$(bashio::config 'plugins_path')
 
 bashio::log.info "Configuring CWA paths..."
-mkdir -p "${LIBRARY_PATH}" "${INGEST_PATH}"
 
-# CWA's image hardcodes /config and declares it as a Docker VOLUME, so it's
-# always a mount point at runtime and can't be replaced with a symlink. We
-# bind-mount a writable target over /config instead so persistent state
-# survives add-on upgrades. Default to /data; if the user set config_path
-# (e.g. /share/nas/calibre/config), use that so /config can live on a
-# network share. Pair a network-share target with network_share_mode: true
-# so SQLite WAL is disabled on app.db.
+# Bind-mount the user's chosen path over a target that the upstream image
+# expects to find. We use bind mounts (not symlinks) because the targets are
+# either Docker VOLUMEs (/config) or pre-populated directories that `ln -sfn`
+# refuses to overwrite (e.g. /config/.config/calibre/plugins after the image
+# seeds it). Idempotent: inspects /proc/self/mountinfo via findmnt to confirm
+# whether target is already bind-mounted from source before mounting.
+# Requires privileged: [SYS_ADMIN] + apparmor: false in config.yaml.
+bind_user_path() {
+    local source=$1 target=$2
+    local real_source
+    mkdir -p "${source}" "${target}"
+    real_source=$(realpath "${source}")
+    # Verify target is already bind-mounted from source by inspecting the mount
+    # table. stat -c %d only compares device IDs and falsely matches any two
+    # directories on the same filesystem, so it cannot confirm the correct source.
+    if ! findmnt --noheadings --mountpoint "${target}" \
+            --source "${real_source}" > /dev/null 2>&1; then
+        mount --bind "${source}" "${target}"
+    fi
+}
+
+# Validate user-supplied paths up front. library_path and ingest_path are
+# required by the schema; config_path and plugins_path are optional. All
+# must be absolute since they are used as mkdir / bind-mount sources, and
+# config_path must not collide with /config itself.
+if ! bashio::var.has_value "${LIBRARY_PATH}"; then
+    bashio::exit.nok "library_path must not be empty"
+elif [[ "${LIBRARY_PATH}" != /* ]]; then
+    bashio::exit.nok "library_path must be an absolute path (got: ${LIBRARY_PATH})"
+fi
+if ! bashio::var.has_value "${INGEST_PATH}"; then
+    bashio::exit.nok "ingest_path must not be empty"
+elif [[ "${INGEST_PATH}" != /* ]]; then
+    bashio::exit.nok "ingest_path must be an absolute path (got: ${INGEST_PATH})"
+fi
 if bashio::var.has_value "${CONFIG_PATH}"; then
-    # Validate: must be an absolute path.
     if [[ "${CONFIG_PATH}" != /* ]]; then
         bashio::exit.nok "config_path must be an absolute path (got: ${CONFIG_PATH})"
     fi
-    # Validate: must not be /config or anything under /config/ to avoid
-    # seeding /config onto itself and then removing it.
+    # Must not be /config or anything under /config/ to avoid seeding /config
+    # onto itself and then removing it.
     if [ "${CONFIG_PATH}" = "/config" ] || [[ "${CONFIG_PATH}" == /config/* ]]; then
         bashio::exit.nok "config_path must not be /config or a path under /config/ (got: ${CONFIG_PATH})"
     fi
+fi
+
+# /config: default to /data so persistent state survives add-on upgrades. If
+# the user set config_path (e.g. /share/nas/calibre/config), use that so
+# /config can live on a network share. Pair a network-share target with
+# network_share_mode: true so SQLite WAL is disabled on app.db.
+if bashio::var.has_value "${CONFIG_PATH}"; then
     CWA_CONFIG_TARGET="${CONFIG_PATH}"
     bashio::log.info "Using user-provided config_path: ${CWA_CONFIG_TARGET}"
 else
@@ -51,17 +84,14 @@ if ! bashio::fs.file_exists "${CWA_CONFIG_TARGET}/.cwa-initialized"; then
     fi
     touch "${CWA_CONFIG_TARGET}/.cwa-initialized"
 fi
-# Idempotent: skip if /config is already on the same device as the target.
-if [ "$(stat -c %d /config)" != "$(stat -c %d "${CWA_CONFIG_TARGET}")" ]; then
-    mount --bind "${CWA_CONFIG_TARGET}" /config
-fi
+bind_user_path "${CWA_CONFIG_TARGET}" /config
 
-ln -sfn "${LIBRARY_PATH}" /calibre-library
-ln -sfn "${INGEST_PATH}" /cwa-book-ingest
+bind_user_path "${LIBRARY_PATH}" /calibre-library
+bind_user_path "${INGEST_PATH}" /cwa-book-ingest
 
 mkdir -p /config/.config/calibre
 if bashio::var.has_value "${PLUGINS_PATH}"; then
-    ln -sfn "${PLUGINS_PATH}" /config/.config/calibre/plugins
+    bind_user_path "${PLUGINS_PATH}" /config/.config/calibre/plugins
     if [ ! -f /config/.config/calibre/customize.py.json ]; then
         bashio::log.warning \
             "plugins_path is set but customize.py.json is missing at /config/.config/calibre/. Plugins will not register until you place it there."
