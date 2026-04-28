@@ -52,7 +52,7 @@ If you set `plugins_path`, you also need a `customize.py.json` file at `/config/
 ## Known issues
 
 - **Kobo sync URLs**: CWA generates absolute URLs for Kobo sync. With `trusted_proxy_count: 1` and HA Ingress, this should Just Work. If your Kobo can't reach the sync URL, check that you're accessing HA via the same hostname that's in the URL CWA generated (open Settings → Server → Server URLs in CWA). If CWA is fronted by Cloudflare or nginx-proxy-manager, bump `trusted_proxy_count` to `2`.
-- **File ownership**: Files written to `/share` are owned by uid/gid 1000 (LSIO base default). If you also access the share over Samba and need different ownership, change it on the host or via Samba's `force user` option.
+- **File ownership**: The app runs as uid/gid 1000 to match HA's `/share` and `/media`, so files it writes there are owned 1000:1000. If you also access the share over Samba and need different ownership, change it on the host or via Samba's `force user` option.
 - **Backups**: CWA's verbose `cwa.log` and the temporary `processed_books/` directory are excluded from HA backups (see `backup_exclude` in `config.yaml`). Library files in `/share` are not in HA backups by design — back those up separately.
 
 ## Persistence

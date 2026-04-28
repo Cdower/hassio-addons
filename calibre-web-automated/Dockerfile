@@ -12,6 +12,12 @@ ARG BUILD_VERSION
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
+# LSIO base remaps its `abc` user to PUID:PGID at s6-overlay startup. HA's
+# Supervisor owns /share and /media as 1000:1000, so without this the app
+# (default 911:911) cannot write library_path / ingest_path.
+ENV PUID=1000 \
+    PGID=1000
+
 # Install bashio so init scripts can use bashio::config / bashio::log.
 # Upstream image is Ubuntu Noble (LSIO base) — jq is already present but pin it.
 ARG BASHIO_VERSION="0.16.2"

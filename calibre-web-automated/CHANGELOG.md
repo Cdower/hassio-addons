@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Permission-denied errors writing to `library_path`, `ingest_path`, or a `/share`-hosted `config_path`. Root cause: the LSIO base ran as uid/gid 911 by default, but HA's Supervisor owns `/share` and `/media` as 1000:1000. The image now sets `PUID=1000` / `PGID=1000` so LSIO remaps its `abc` user to match, and the init script chowns the directories it creates so a brand-new install isn't left with root-owned bind-mount sources.
 - Startup failure `rm: cannot remove '/config': Device or resource busy`. Root cause: the upstream image declares `VOLUME /config`, so `/config` is always a Docker mount point at runtime and `rm -rf /config` (used to replace it with a symlink) cannot succeed. The init script now bind-mounts the target (`/data` or `config_path`) over `/config`, which requires `privileged: [SYS_ADMIN]` and `apparmor: false` — Home Assistant flags add-ons with elevated capabilities, but they still run.
 - Startup failure `ln: /config/.config/calibre/plugins: cannot overwrite directory` when `plugins_path` was set. Root cause: `ln -sfn` only replaces existing symlinks, not directories, and the upstream image's `/config` seed populates `.config/calibre/plugins` as a real directory. `library_path`, `ingest_path`, and `plugins_path` are now bind-mounted (instead of symlinked) over `/calibre-library`, `/cwa-book-ingest`, and `/config/.config/calibre/plugins` respectively, which works regardless of whether the targets are pre-populated.
 
