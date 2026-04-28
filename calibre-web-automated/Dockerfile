@@ -1,4 +1,5 @@
 ARG BUILD_FROM="crocodilestick/calibre-web-automated:v4.0.6"
+# hadolint ignore=DL3006
 FROM ${BUILD_FROM}
 
 ARG BUILD_ARCH
