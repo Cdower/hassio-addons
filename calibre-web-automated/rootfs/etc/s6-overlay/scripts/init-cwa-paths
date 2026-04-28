@@ -10,6 +10,12 @@ INGEST_PATH=$(bashio::config 'ingest_path')
 CONFIG_PATH=$(bashio::config 'config_path')
 PLUGINS_PATH=$(bashio::config 'plugins_path')
 
+# Match the LSIO base's PUID/PGID (set in the Dockerfile) so directories we
+# mkdir as root are usable by `abc` after it's remapped. Non-recursive: we
+# never rewrite ownership on a user's existing files inside their share.
+APP_UID=${PUID:-1000}
+APP_GID=${PGID:-1000}
+
 bashio::log.info "Configuring CWA paths..."
 
 # Bind-mount the user's chosen path over a target that the upstream image
@@ -23,6 +29,7 @@ bind_user_path() {
     local source=$1 target=$2
     local real_source
     mkdir -p "${source}" "${target}"
+    chown "${APP_UID}:${APP_GID}" "${source}"
     real_source=$(realpath "${source}")
     # Verify target is already bind-mounted from source by inspecting the mount
     # table. stat -c %d only compares device IDs and falsely matches any two
@@ -83,6 +90,10 @@ if ! bashio::fs.file_exists "${CWA_CONFIG_TARGET}/.cwa-initialized"; then
         cp -an /config/. "${CWA_CONFIG_TARGET}/"
     fi
     touch "${CWA_CONFIG_TARGET}/.cwa-initialized"
+    # Seed contents were copied as root; remap to APP_UID:APP_GID so `abc` can
+    # read/write its own state. Bounded to first-run by the sentinel above so
+    # we don't recurse over a populated share on every restart.
+    chown -R "${APP_UID}:${APP_GID}" "${CWA_CONFIG_TARGET}"
 fi
 bind_user_path "${CWA_CONFIG_TARGET}" /config
 
@@ -90,6 +101,7 @@ bind_user_path "${LIBRARY_PATH}" /calibre-library
 bind_user_path "${INGEST_PATH}" /cwa-book-ingest
 
 mkdir -p /config/.config/calibre
+chown "${APP_UID}:${APP_GID}" /config/.config /config/.config/calibre
 if bashio::var.has_value "${PLUGINS_PATH}"; then
     bind_user_path "${PLUGINS_PATH}" /config/.config/calibre/plugins
     if [ ! -f /config/.config/calibre/customize.py.json ]; then
