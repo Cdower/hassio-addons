@@ -19,6 +19,15 @@ mkdir -p "${LIBRARY_PATH}" "${INGEST_PATH}"
 # on a network share. Pair a network-share target with network_share_mode:
 # true so SQLite WAL is disabled on app.db.
 if bashio::var.has_value "${CONFIG_PATH}"; then
+    # Validate: must be an absolute path.
+    if [[ "${CONFIG_PATH}" != /* ]]; then
+        bashio::exit.nok "config_path must be an absolute path (got: ${CONFIG_PATH})"
+    fi
+    # Validate: must not be /config or anything under /config/ to avoid
+    # seeding /config onto itself and then removing it.
+    if [ "${CONFIG_PATH}" = "/config" ] || [[ "${CONFIG_PATH}" == /config/* ]]; then
+        bashio::exit.nok "config_path must not be /config or a path under /config/ (got: ${CONFIG_PATH})"
+    fi
     CWA_CONFIG_TARGET="${CONFIG_PATH}"
     bashio::log.info "Using user-provided config_path: ${CWA_CONFIG_TARGET}"
 else
