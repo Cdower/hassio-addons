@@ -16,13 +16,19 @@ bashio::log.info "Configuring CWA paths..."
 # expects to find. We use bind mounts (not symlinks) because the targets are
 # either Docker VOLUMEs (/config) or pre-populated directories that `ln -sfn`
 # refuses to overwrite (e.g. /config/.config/calibre/plugins after the image
-# seeds it). Idempotent: if the target's device already matches the source's,
-# the bind is in place and we skip. Requires privileged: [SYS_ADMIN] +
-# apparmor: false in config.yaml.
+# seeds it). Idempotent: inspects /proc/self/mountinfo via findmnt to confirm
+# whether target is already bind-mounted from source before mounting.
+# Requires privileged: [SYS_ADMIN] + apparmor: false in config.yaml.
 bind_user_path() {
     local source=$1 target=$2
+    local real_source
     mkdir -p "${source}" "${target}"
-    if [ "$(stat -c %d "${target}")" != "$(stat -c %d "${source}")" ]; then
+    real_source=$(realpath "${source}")
+    # Verify target is already bind-mounted from source by inspecting the mount
+    # table. stat -c %d only compares device IDs and falsely matches any two
+    # directories on the same filesystem, so it cannot confirm the correct source.
+    if ! findmnt --noheadings --mountpoint "${target}" \
+            --source "${real_source}" > /dev/null 2>&1; then
         mount --bind "${source}" "${target}"
     fi
 }
@@ -64,6 +70,20 @@ if ! bashio::fs.file_exists "${CWA_CONFIG_TARGET}/.cwa-initialized"; then
 fi
 if [ "$(stat -c %d /config)" != "$(stat -c %d "${CWA_CONFIG_TARGET}")" ]; then
     mount --bind "${CWA_CONFIG_TARGET}" /config
+fi
+
+# Validate library_path and ingest_path are non-empty absolute paths before
+# using them as bind-mount sources. An empty or relative value would cause
+# mkdir -p / mount --bind to act on an unintended path.
+if ! bashio::var.has_value "${LIBRARY_PATH}"; then
+    bashio::exit.nok "library_path must not be empty"
+elif [[ "${LIBRARY_PATH}" != /* ]]; then
+    bashio::exit.nok "library_path must be an absolute path (got: ${LIBRARY_PATH})"
+fi
+if ! bashio::var.has_value "${INGEST_PATH}"; then
+    bashio::exit.nok "ingest_path must not be empty"
+elif [[ "${INGEST_PATH}" != /* ]]; then
+    bashio::exit.nok "ingest_path must be an absolute path (got: ${INGEST_PATH})"
 fi
 
 bind_user_path "${LIBRARY_PATH}" /calibre-library
