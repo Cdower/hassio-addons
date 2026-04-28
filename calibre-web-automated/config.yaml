@@ -1,6 +1,6 @@
 ---
 name: Calibre-Web Automated
-version: "4.0.6.3"
+version: "4.0.6.2"
 # version: "dev"
 slug: calibre-web-automated
 description: Self-hosted ebook library with automatic ingest, conversion, and metadata
@@ -24,10 +24,10 @@ privileged:
 apparmor: false
 image: ghcr.io/cdower/{arch}-hassio-addon-calibre-web-automated
 options:
-  library_path: /share/calibre/library
-  ingest_path: /share/calibre/ingest
-  config_path: ""
-  plugins_path: ""
+  library_path: /share/calibre/calibre-library
+  ingest_path: /share/calibre/cwa-book-ingest
+  config_path: /share/calibre/config
+  plugins_path: /share/calibre/plugins
   network_share_mode: false
   hardcover_token: ""
   trusted_proxy_count: 1
