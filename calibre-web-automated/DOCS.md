@@ -4,7 +4,7 @@
 
 1. Add this repository (`https://github.com/Cdower/hassio-addons`) to Home Assistant: **Settings → Add-ons → Add-on Store → ⋮ → Repositories**.
 2. Install **Calibre-Web Automated** from the store.
-3. Start the add-on. The Web UI opens in a new tab from the sidebar, and is also reachable directly at `http://<host>:8083`.
+3. Start the add-on. The sidebar opens the direct Web UI URL in a new tab, and the app is also reachable directly at `http://<host>:8083`. Your browser/client must be able to reach `http(s)://<host>:8083`; if you access Home Assistant through a remote URL or reverse proxy that does not also expose port 8083 (for example HA Cloud), the sidebar link may not work.
 
 ## Configuration options
 
