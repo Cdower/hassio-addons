@@ -129,7 +129,7 @@ echo -n "$(bashio::config 'trusted_proxy_count')" > /run/s6/container_environmen
 # read it from the env instead of hitting /supervisor/info — that endpoint
 # needs hassio_api: true and otherwise logs a "missing API permission" error
 # on every start.
-TZ_VALUE=${TZ:-UTC}
+TZ_VALUE="${TZ:-UTC}"
 bashio::log.info "Setting TZ environment variable to ${TZ_VALUE}"
 echo -n "${TZ_VALUE}" > /run/s6/container_environment/TZ
 
