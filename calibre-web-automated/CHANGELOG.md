@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Sidebar now opens CWA in a new tab (via `webui`) instead of in an iframe (Ingress). Root cause: CWA emits absolute redirects (e.g. `Location: /login`) without an Ingress URL prefix, because HA Ingress doesn't add `X-Script-Name`/`X-Forwarded-Prefix` to forwarded requests and CWA has no env var for `SCRIPT_NAME` / `APPLICATION_ROOT`. Result was a 404 on `/login` after the sidebar redirect. Direct port access (`http://<host>:8083`) sidesteps the prefix problem entirely.
+
+### Fixed
+
+- Supervisor log spam `missing API permission for /supervisor/info` / `Invalid token for access /supervisor/info` on every start. Root cause: the init script called `bashio::supervisor.timezone`, which hits `/supervisor/info` and requires `hassio_api: true` (not granted). The Supervisor already passes `TZ` as a container env var, so the script reads that directly instead.
+
 ### Added
 
 - `config_path` option to host CWA's `/config` (app database, user accounts, settings) on a network share. Empty (default) keeps `/config` on HA's local `/data` as before; pair a `/share/...` value with `network_share_mode: true` so SQLite WAL is disabled on `app.db`.

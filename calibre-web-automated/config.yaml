@@ -1,6 +1,6 @@
 ---
 name: Calibre-Web Automated
-version: "4.0.6.5"
+version: "4.0.6.7"
 # version: "dev"
 slug: calibre-web-automated
 description: Self-hosted ebook library with automatic ingest, conversion, and metadata
@@ -9,13 +9,11 @@ arch:
   - amd64
   - aarch64
 init: false
-ingress: true
-ingress_port: 8083
-panel_icon: mdi:book-open-page-variant
+webui: "http://[HOST]:[PORT:8083]/"
 ports:
   "8083/tcp": 8083
 ports_description:
-  "8083/tcp": Web UI (also available via Ingress)
+  "8083/tcp": Web UI
 map:
   - share:rw
   - media:rw

@@ -125,10 +125,11 @@ mkdir -p /run/s6/container_environment
 echo -n "$(bashio::config 'network_share_mode')" > /run/s6/container_environment/NETWORK_SHARE_MODE
 echo -n "$(bashio::config 'hardcover_token')"    > /run/s6/container_environment/HARDCOVER_TOKEN
 echo -n "$(bashio::config 'trusted_proxy_count')" > /run/s6/container_environment/TRUSTED_PROXY_COUNT
-TZ_VALUE=$(bashio::supervisor.timezone 2>/dev/null || true)
-if [ -z "${TZ_VALUE}" ] || [ "${TZ_VALUE}" = "null" ]; then
-    TZ_VALUE="UTC"
-fi
+# TZ is passed in by Supervisor (ENV_TIME in supervisor/docker/const.py), so
+# read it from the env instead of hitting /supervisor/info — that endpoint
+# needs hassio_api: true and otherwise logs a "missing API permission" error
+# on every start.
+TZ_VALUE="${TZ:-UTC}"
 bashio::log.info "Setting TZ environment variable to ${TZ_VALUE}"
 echo -n "${TZ_VALUE}" > /run/s6/container_environment/TZ
 

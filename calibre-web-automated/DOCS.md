@@ -4,7 +4,7 @@
 
 1. Add this repository (`https://github.com/Cdower/hassio-addons`) to Home Assistant: **Settings → Add-ons → Add-on Store → ⋮ → Repositories**.
 2. Install **Calibre-Web Automated** from the store.
-3. Start the add-on. The Web UI is available via the sidebar (Ingress) or at `http://<host>:8083`.
+3. Start the add-on. The sidebar opens the direct Web UI URL in a new tab, and the app is also reachable directly at `http://<host>:8083`. Your browser/client must be able to reach `http(s)://<host>:8083`; if you access Home Assistant through a remote URL or reverse proxy that does not also expose port 8083 (for example HA Cloud), the sidebar link may not work.
 
 ## Configuration options
 
@@ -16,7 +16,7 @@
 | `plugins_path`        | _(empty)_                | Optional Calibre plugins folder. See "Plugins" below.                                                                    |
 | `network_share_mode`  | `false`                  | Set `true` when the library or `config_path` lives on NFS/SMB. Disables SQLite WAL on `metadata.db`/`app.db` and switches the ingest watcher to polling. |
 | `hardcover_token`     | _(empty)_                | API token for [Hardcover](https://hardcover.app) metadata enrichment.                                                    |
-| `trusted_proxy_count` | `1`                      | Number of reverse proxies in front of CWA. `1` covers HA Ingress. Increase to `2` if you front HA with Cloudflare/nginx. |
+| `trusted_proxy_count` | `1`                      | Number of reverse proxies in front of CWA whose `X-Forwarded-*` headers should be trusted. Use `1` only when the add-on is behind exactly one reverse proxy (Cloudflare, nginx-proxy-manager, Traefik, etc.). Set higher for chained proxies. For direct access with no reverse proxy, use a lower value such as `0` if supported, rather than trusting forwarded headers from clients. |
 | `log_level`           | `info`                   | One of `trace`, `debug`, `info`, `notice`, `warning`, `error`, `fatal`.                                                  |
 
 ## Setup paths
@@ -51,7 +51,7 @@ If you set `plugins_path`, you also need a `customize.py.json` file at `/config/
 
 ## Known issues
 
-- **Kobo sync URLs**: CWA generates absolute URLs for Kobo sync. With `trusted_proxy_count: 1` and HA Ingress, this should Just Work. If your Kobo can't reach the sync URL, check that you're accessing HA via the same hostname that's in the URL CWA generated (open Settings → Server → Server URLs in CWA). If CWA is fronted by Cloudflare or nginx-proxy-manager, bump `trusted_proxy_count` to `2`.
+- **Kobo sync URLs**: CWA generates absolute URLs for Kobo sync based on the host it sees the request from. Make sure your Kobo can reach CWA at that host:port (open Settings → Server → Server URLs in CWA to inspect the URL it generated). If CWA is fronted by Cloudflare/nginx-proxy-manager/Traefik, bump `trusted_proxy_count` so CWA picks up the original host from `X-Forwarded-Host`.
 - **File ownership**: The app runs as uid/gid 1000 to match HA's `/share` and `/media`, so files it writes there are owned 1000:1000. If you also access the share over Samba and need different ownership, change it on the host or via Samba's `force user` option.
 - **Backups**: CWA's verbose `cwa.log` and the temporary `processed_books/` directory are excluded from HA backups (see `backup_exclude` in `config.yaml`). Library files in `/share` are not in HA backups by design — back those up separately.
 
