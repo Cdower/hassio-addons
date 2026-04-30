@@ -107,7 +107,7 @@ jobs:
           SHELLCHECK_OPTS: -s bash
 
   lint-prek:
-    name: prek
+    name: Prek
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
