@@ -1,0 +1,72 @@
+#!/command/with-contenv bashio
+# ==============================================================================
+# Bring the tailnet node up and (optionally) configure `tailscale serve` so
+# CWA's localhost UI is reachable at https://<hostname>.<tailnet>.ts.net.
+# Runs after tailscaled is up. No-ops when tailscale_authkey is empty.
+# ==============================================================================
+set -e
+
+if ! bashio::config.has_value 'tailscale_authkey'; then
+    bashio::log.info "tailscale_authkey not set — skipping tailscale up"
+    exit 0
+fi
+
+AUTHKEY=$(bashio::config 'tailscale_authkey')
+HOSTNAME=$(bashio::config 'tailscale_hostname')
+EXTRA_ARGS=$(bashio::config 'tailscale_extra_args')
+SOCK=/var/run/tailscale/tailscaled.sock
+
+# Default the tailnet hostname to the add-on slug if the user didn't pick one.
+if ! bashio::var.has_value "${HOSTNAME}"; then
+    HOSTNAME="cwa"
+fi
+
+# Wait for tailscaled's control socket. tailscaled creates it ~immediately on
+# start, but the longrun runs in parallel with this oneshot in s6-rc, so we
+# poll briefly. 30s is generous; in practice this returns within ~1s.
+for _ in $(seq 1 30); do
+    if [ -S "${SOCK}" ]; then
+        break
+    fi
+    sleep 1
+done
+if [ ! -S "${SOCK}" ]; then
+    bashio::exit.nok "tailscaled socket ${SOCK} did not appear within 30s"
+fi
+
+bashio::log.info "Bringing tailnet node up as ${HOSTNAME}..."
+
+# --reset so that changes to tailscale_hostname or tailscale_extra_args via
+# the add-on UI take effect on restart instead of inheriting old prefs from
+# tailscaled.state. --accept-dns=false because the add-on shouldn't override
+# its container resolver from MagicDNS — CWA queries Hardcover/Goodreads, not
+# tailnet hosts. word-splitting EXTRA_ARGS is intentional so users can pass
+# multiple flags via the single config field.
+# shellcheck disable=SC2086
+/opt/tailscale/tailscale --socket="${SOCK}" up \
+    --authkey="${AUTHKEY}" \
+    --hostname="${HOSTNAME}" \
+    --accept-dns=false \
+    --reset \
+    ${EXTRA_ARGS}
+
+if bashio::config.true 'tailscale_serve'; then
+    bashio::log.info "Configuring tailscale serve → http://127.0.0.1:8083"
+    # Reset any previous serve config first so re-runs on different ports/proxies
+    # don't accumulate stale rules. Idempotent — safe even if nothing was set.
+    /opt/tailscale/tailscale --socket="${SOCK}" serve reset || true
+    /opt/tailscale/tailscale --socket="${SOCK}" serve --bg \
+        --https=443 \
+        http://127.0.0.1:8083
+
+    if bashio::config.true 'tailscale_funnel'; then
+        bashio::log.info "Enabling Tailscale Funnel on :443 (public)"
+        /opt/tailscale/tailscale --socket="${SOCK}" funnel --bg 443 on
+    fi
+else
+    if bashio::config.true 'tailscale_funnel'; then
+        bashio::log.warning "tailscale_funnel is true but tailscale_serve is false — Funnel requires serve. Skipping."
+    fi
+fi
+
+bashio::log.info "Tailscale ready"

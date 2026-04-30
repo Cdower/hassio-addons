@@ -34,6 +34,25 @@ RUN \
     && ln -s /usr/lib/bashio/bashio /usr/bin/bashio \
     && rm -rf "/tmp/bashio-${BASHIO_VERSION}" /var/lib/apt/lists/*
 
+# Install Tailscale. Userspace networking mode (set via the s6 run script)
+# means no /dev/net/tun, NET_ADMIN, or NET_RAW required — tailscaled runs as
+# a userspace SOCKS/HTTP proxy and `tailscale serve` exposes localhost:8083
+# to the tailnet. Tarball is fetched over HTTPS from the official publisher;
+# matches upstream `hassio-addons/app-tailscale` precedent (no sha pin).
+ARG TAILSCALE_VERSION="1.96.4"
+RUN \
+    case "${BUILD_ARCH}" in \
+        amd64) TS_ARCH=amd64 ;; \
+        aarch64) TS_ARCH=arm64 ;; \
+        *) echo "Unsupported BUILD_ARCH: ${BUILD_ARCH}" >&2; exit 1 ;; \
+    esac \
+    && mkdir -p /opt/tailscale \
+    && curl -fsSL "https://pkgs.tailscale.com/stable/tailscale_${TAILSCALE_VERSION}_${TS_ARCH}.tgz" \
+        | tar -xzf - -C /opt/tailscale --strip-components=1 \
+    && rm -rf /opt/tailscale/systemd \
+    && ln -sf /opt/tailscale/tailscale /usr/local/bin/tailscale \
+    && ln -sf /opt/tailscale/tailscaled /usr/local/bin/tailscaled
+
 COPY rootfs /
 
 LABEL \

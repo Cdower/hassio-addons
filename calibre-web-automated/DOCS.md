@@ -18,6 +18,11 @@
 | `hardcover_token`     | _(empty)_                | API token for [Hardcover](https://hardcover.app) metadata enrichment.                                                    |
 | `trusted_proxy_count` | `1`                      | Number of reverse proxies in front of CWA whose `X-Forwarded-*` headers should be trusted. Use `1` only when the add-on is behind exactly one reverse proxy (Cloudflare, nginx-proxy-manager, Traefik, etc.). Set higher for chained proxies. For direct access with no reverse proxy, use a lower value such as `0` if supported, rather than trusting forwarded headers from clients. |
 | `log_level`           | `info`                   | One of `trace`, `debug`, `info`, `notice`, `warning`, `error`, `fatal`.                                                  |
+| `tailscale_authkey`   | _(empty)_                | Tailscale auth key (`tskey-auth-…`). Empty disables the embedded Tailscale entirely. See "Tailscale" below.              |
+| `tailscale_hostname`  | _(empty, defaults `cwa`)_| Hostname this add-on registers in your tailnet.                                                                          |
+| `tailscale_serve`     | `true`                   | When `true`, exposes CWA at `https://<tailscale_hostname>.<tailnet>.ts.net` via `tailscale serve` (auto HTTPS).            |
+| `tailscale_funnel`    | `false`                  | When `true` (and `tailscale_serve: true`), additionally enables Tailscale Funnel so the same URL is reachable from the public internet. Requires Funnel to be enabled for your tailnet in the admin console. |
+| `tailscale_extra_args`| _(empty)_                | Extra flags appended to `tailscale up`, e.g. `--advertise-tags=tag:calibre`.                                              |
 
 ## Setup paths
 
@@ -48,6 +53,64 @@ Leave the defaults. The add-on creates `/share/calibre/library` and `/share/cali
 ## Plugins (`customize.py.json` gotcha)
 
 If you set `plugins_path`, you also need a `customize.py.json` file at `/config/.config/calibre/customize.py.json` (i.e. one level above `plugins/`) for Calibre to load the plugins. The add-on logs a warning if this is missing. See the [upstream README plugins section](https://github.com/crocodilestick/Calibre-Web-Automated#plugins) for the file's format.
+
+## Tailscale (optional)
+
+The add-on can join your tailnet as its own node, separate from the Home Assistant host. This is useful if you want to ACL/tag CWA independently, or reach it remotely without putting the rest of HA on the tailnet. Leave `tailscale_authkey` empty to disable.
+
+How it works: `tailscaled` runs as a second process inside the add-on's container in [userspace networking mode](https://tailscale.com/docs/concepts/userspace-networking) — no `/dev/net/tun`, no extra capabilities. `tailscale serve` proxies tailnet HTTPS traffic to CWA's local `127.0.0.1:8083`. Tailscale state is persisted under `/data/tailscaled/` so the node identity survives add-on upgrades and is included in HA backups.
+
+### Setup
+
+1. In the [Tailscale admin console](https://login.tailscale.com/admin/), generate an auth key (Settings → Keys → Generate auth key). For unattended add-on restarts you typically want **Reusable** and a long expiry. If you also plan to advertise tags via `tailscale_extra_args`, set the key's **Tags** to those tags.
+2. In this add-on's config, set `tailscale_authkey` and (optionally) `tailscale_hostname`. Restart the add-on.
+3. Wait ~10 seconds, then look for the node in the admin console. CWA will be reachable from any other tailnet device at `https://<tailscale_hostname>.<your-tailnet>.ts.net`.
+
+### Example: tagged CWA node + ACL
+
+Add-on options:
+
+```yaml
+tailscale_authkey: "tskey-auth-XXXXXXXXXXXXXXXXX"
+tailscale_hostname: "cwa"
+tailscale_serve: true
+tailscale_funnel: false
+tailscale_extra_args: "--advertise-tags=tag:calibre"
+```
+
+Tailnet ACLs (admin console → Access controls):
+
+```hujson
+{
+  "tagOwners": {
+    "tag:calibre": ["autogroup:admin"]
+  },
+  "acls": [
+    // Members can reach CWA on its HTTPS port
+    {
+      "action": "accept",
+      "src":    ["autogroup:member"],
+      "dst":    ["tag:calibre:443"]
+    }
+  ]
+}
+```
+
+Equivalent to running, after the node is up:
+
+```sh
+tailscale serve --bg --https=443 http://127.0.0.1:8083
+```
+
+(which is exactly what the add-on's init script does on each restart). You can inspect the resulting JSON-form config from the add-on shell with `tailscale serve status --json`.
+
+### Public exposure (Funnel)
+
+`tailscale_funnel: true` makes the same `https://<hostname>.<tailnet>.ts.net` URL reachable from the public internet. Funnel must first be enabled for your tailnet in the admin console (Settings → Feature previews → Funnel). Use this carefully — it bypasses the tailnet ACL boundary, so anyone with the URL can reach CWA's login page.
+
+### vs the standalone Tailscale add-on
+
+If you just want remote access to your *whole* HA instance, the [official community Tailscale add-on](https://github.com/hassio-addons/app-tailscale) is simpler — it puts the entire HA host on the tailnet (every published port, including this add-on's `:8083`). Use the embedded option here when you want CWA to have a *separate* tailnet identity from the HA host.
 
 ## Known issues
 
