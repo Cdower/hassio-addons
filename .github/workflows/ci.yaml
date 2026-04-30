@@ -93,19 +93,6 @@ jobs:
             fi
           done
 
-  lint-shellcheck:
-    name: Shellcheck
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
-        with:
-          persist-credentials: false
-      - name: Run Shellcheck
-        uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38  # 2.0.0
-        env:
-          SHELLCHECK_OPTS: -s bash
-
   lint-prek:
     name: Prek
     runs-on: ubuntu-latest
@@ -136,7 +123,6 @@ jobs:
       - lint-hadolint
       - lint-json
       - lint-prek
-      - lint-shellcheck
       - lint-yamllint
     runs-on: ${{ matrix.architecture == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     strategy:
