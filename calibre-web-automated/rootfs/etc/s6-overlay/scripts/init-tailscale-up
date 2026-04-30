@@ -63,6 +63,8 @@ serve_or_warn() {
     fi
 }
 
+# Both http and https are served by the same tailscaled process — `tailscale
+# serve` just adds handlers to its persisted config, it doesn't fork anything.
 case "${SERVE_MODE}" in
     none)
         bashio::log.info "tailscale_serve=none — skipping serve config (CWA reachable at http://${HOSTNAME}:8083)"
@@ -71,9 +73,15 @@ case "${SERVE_MODE}" in
         bashio::log.info "Configuring tailscale serve: HTTP 80 -> http://127.0.0.1:8083"
         serve_or_warn "http" --bg --http=80 http://127.0.0.1:8083
         ;;
-    https|*)
+    https)
         bashio::log.info "Configuring tailscale serve: HTTPS 443 -> http://127.0.0.1:8083"
         bashio::log.info "Requires HTTPS Certificates enabled in your tailnet (admin console -> DNS -> HTTPS Certificates)."
+        serve_or_warn "https" --bg --https=443 http://127.0.0.1:8083
+        ;;
+    both|*)
+        bashio::log.info "Configuring tailscale serve: HTTP 80 + HTTPS 443 -> http://127.0.0.1:8083"
+        bashio::log.info "HTTPS half requires HTTPS Certificates enabled in your tailnet (admin console -> DNS -> HTTPS Certificates); HTTP works regardless."
+        serve_or_warn "http"  --bg --http=80   http://127.0.0.1:8083
         serve_or_warn "https" --bg --https=443 http://127.0.0.1:8083
         ;;
 esac

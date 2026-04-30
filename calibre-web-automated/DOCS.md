@@ -21,7 +21,7 @@
 | `tailscale_enabled`   | `false`                  | Run a Tailscale sidecar inside this add-on so CWA is reachable from your tailnet. See "Tailscale sidecar" below.         |
 | `tailscale_hostname`  | `calibre`                | Hostname the add-on registers in your tailnet. With MagicDNS on, you reach CWA at `http://<hostname>/` from any tailnet device. |
 | `tailscale_authkey`   | _(empty)_                | Tailscale auth key for first-time login. Leave empty to authenticate interactively (an auth URL is printed to the add-on log). After login, state persists in `/data/tailscale` and the key is no longer required. |
-| `tailscale_serve`     | `https`                  | `https` (port 443; requires HTTPS Certificates enabled in your tailnet admin console — see "Serve modes" below), `http` (port 80, plain HTTP, no cert needed), or `none` (skip serve; CWA is reachable at `http://<hostname>:8083` on the tailnet). |
+| `tailscale_serve`     | `both`                   | `both` (port 80 *and* 443, run by a single tailscaled process), `https` (port 443 only), `http` (port 80 only), or `none` (skip serve; CWA is reachable at `http://<hostname>:8083` on the tailnet). See "Serve modes" below. |
 
 ## Setup paths
 
@@ -60,24 +60,29 @@ Compare with the official [Tailscale add-on](https://github.com/hassio-addons/ad
 ### Setup
 
 1. **Generate an auth key** in the [Tailscale admin console](https://login.tailscale.com/admin/settings/keys). A reusable, non-ephemeral key is fine; it's only used once. Optional but recommended: tag the key (`tag:calibre`) so you can write ACLs that scope what the sidecar can do.
-2. **Enable [HTTPS Certificates](https://tailscale.com/kb/1153/enabling-https)** in the Tailscale admin console (DNS → HTTPS Certificates). This is required for the default `tailscale_serve: https` mode. If you don't want HTTPS, set `tailscale_serve: http` and skip this step.
+2. **Enable [HTTPS Certificates](https://tailscale.com/kb/1153/enabling-https)** in the Tailscale admin console (DNS → HTTPS Certificates). This unlocks the HTTPS half of the default `both` serve mode. If certs aren't enabled, the add-on still runs — the HTTP half keeps working and the HTTPS attempt logs a warning (no startup failure).
 3. **Enable in the add-on config**:
    ```yaml
    tailscale_enabled: true
    tailscale_hostname: calibre        # or whatever name you want to type
    tailscale_authkey: tskey-auth-...  # paste the key here; remove after first start if you like
-   tailscale_serve: https             # default: HTTPS on port 443 (provisioned by Tailscale)
+   tailscale_serve: both              # default: HTTP on 80 + HTTPS on 443
    ```
 4. **Restart** the add-on. On first start, the sidecar registers `calibre` with your tailnet using the auth key and Tailscale provisions a TLS cert for `calibre.<tailnet>.ts.net`. State is persisted to `/data/tailscale` so subsequent restarts don't need the key.
-5. **Visit** `https://calibre.<tailnet>.ts.net/` from any tailnet device. With [MagicDNS](https://tailscale.com/kb/1081/magicdns) enabled, the short name `calibre` resolves on the network, but typing just `calibre` in a browser will produce a cert-name mismatch (the cert is for the full FQDN). Either bookmark the full URL or use `tailscale_serve: http` if typing the bare hostname matters more than TLS.
+5. **Visit CWA** from any tailnet device:
+   - Bare hostname (`calibre`) in a browser: the browser defaults to `http://`, hits the HTTP-on-80 handler, lands on CWA. With [MagicDNS](https://tailscale.com/kb/1081/magicdns) enabled, the short name resolves automatically.
+   - Full FQDN (`https://calibre.<tailnet>.ts.net/`): hits the HTTPS-on-443 handler with a valid Tailscale-issued cert.
 
 If you leave `tailscale_authkey` empty, the add-on log will print an auth URL on first start; click it within ~5 minutes to log the device in interactively.
 
 ### Serve modes
 
-- `https` (default): proxies the tailnet device's port 443 to CWA's `127.0.0.1:8083`, with a Tailscale-issued TLS cert for `<hostname>.<tailnet>.ts.net`. Requires [HTTPS Certificates](https://tailscale.com/kb/1153/enabling-https) enabled in your tailnet. Browser shows a valid cert when you visit the full FQDN. If certs aren't enabled, the add-on logs a clear error and falls back to leaving the device reachable at `http://<hostname>:8083` (the serve config doesn't apply, but the device is still on the tailnet).
-- `http`: proxies the tailnet device's port 80 to CWA. Plain HTTP, no certificates needed. Best fit if you want to type the bare hostname (`calibre`) into a browser — browsers default to `http://` for bare hostnames, and there's no cert FQDN to mismatch. Note: HTTP is plaintext between your browser and the sidecar; the WireGuard tunnel underneath is still encrypted, so this only matters for browser-side hygiene (secure cookies, lock icon, etc.).
-- `none`: don't run `tailscale serve`. CWA is still reachable at `http://<hostname>:8083` (the raw port, since the device itself is on the tailnet). Use this if you want to manage `tailscale serve` / `tailscale funnel` manually.
+All four modes use a **single** `tailscaled` process. `tailscale serve` just adds handlers to that process's persisted config — it never forks another tailscaled — so `both` doesn't double up on resources.
+
+- `both` (default): port 80 (plain HTTP) *and* port 443 (HTTPS with a Tailscale-issued cert) both proxy to CWA at `127.0.0.1:8083`. Lets you reach CWA either by typing the bare `calibre` (browser → http://) or the full `https://calibre.<tailnet>.ts.net/`. The HTTPS half requires [HTTPS Certificates](https://tailscale.com/kb/1153/enabling-https) enabled in your tailnet; if they aren't, the HTTP half still works and the HTTPS attempt logs a warning instead of failing startup.
+- `https`: HTTPS on 443 only. Requires HTTPS Certificates enabled. Browser shows a valid cert at the FQDN; the bare hostname produces a cert-name mismatch (cert is for `calibre.<tailnet>.ts.net`, not `calibre`).
+- `http`: HTTP on 80 only. No certificates needed. Note: HTTP is plaintext between your browser and the sidecar; the WireGuard tunnel underneath is still encrypted, so this only matters for browser-side hygiene (secure cookies, lock icon, etc.).
+- `none`: don't run `tailscale serve` at all. CWA is still reachable at `http://<hostname>:8083` (the raw port, since the device itself is on the tailnet). Use this if you want to manage `tailscale serve` / `tailscale funnel` manually.
 
 ### Tailscale services (advanced)
 
