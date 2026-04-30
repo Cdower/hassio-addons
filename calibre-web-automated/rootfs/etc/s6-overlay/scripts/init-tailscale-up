@@ -46,22 +46,35 @@ if ! tailscale up "${UP_ARGS[@]}"; then
     exit 1
 fi
 
+# Always reset first so a mode change (e.g. http -> https) doesn't leave stale
+# handlers from a previous run. Per `tailscale serve` docs, the persisted
+# config is additive across invocations.
+tailscale serve reset > /dev/null 2>&1 || true
+
+# Soft-fail on serve config so that, e.g., running https without HTTPS certs
+# enabled in the tailnet doesn't block addon startup. The device is still on
+# the tailnet via `tailscale up` above and reachable at <hostname>:8083.
+serve_or_warn() {
+    local label=$1
+    shift
+    if ! tailscale serve "$@"; then
+        bashio::log.error "tailscale serve (${label}) failed. CWA is still reachable at http://${HOSTNAME}:8083 on the tailnet."
+        bashio::log.error "If you wanted HTTPS, enable HTTPS Certificates in the Tailscale admin console (DNS -> HTTPS Certificates) and restart the add-on, or set tailscale_serve: http."
+    fi
+}
+
 case "${SERVE_MODE}" in
     none)
-        bashio::log.info "tailscale_serve=none — skipping serve config (CWA reachable at \${tailnet-ip}:8083)"
-        # Clear any stale serve config from a previous run.
-        tailscale serve reset > /dev/null 2>&1 || true
+        bashio::log.info "tailscale_serve=none — skipping serve config (CWA reachable at http://${HOSTNAME}:8083)"
         ;;
-    https)
-        bashio::log.info "Configuring tailscale serve: HTTPS 443 -> http://127.0.0.1:8083"
-        bashio::log.info "Requires HTTPS certificates enabled in your tailnet (admin console -> DNS -> HTTPS Certificates)."
-        tailscale serve reset > /dev/null 2>&1 || true
-        tailscale serve --bg --https=443 http://127.0.0.1:8083
-        ;;
-    http|*)
+    http)
         bashio::log.info "Configuring tailscale serve: HTTP 80 -> http://127.0.0.1:8083"
-        tailscale serve reset > /dev/null 2>&1 || true
-        tailscale serve --bg --http=80 http://127.0.0.1:8083
+        serve_or_warn "http" --bg --http=80 http://127.0.0.1:8083
+        ;;
+    https|*)
+        bashio::log.info "Configuring tailscale serve: HTTPS 443 -> http://127.0.0.1:8083"
+        bashio::log.info "Requires HTTPS Certificates enabled in your tailnet (admin console -> DNS -> HTTPS Certificates)."
+        serve_or_warn "https" --bg --https=443 http://127.0.0.1:8083
         ;;
 esac
 

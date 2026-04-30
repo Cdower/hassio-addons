@@ -33,7 +33,7 @@ options:
   tailscale_enabled: false
   tailscale_hostname: calibre
   tailscale_authkey: ""
-  tailscale_serve: http
+  tailscale_serve: https
 schema:
   library_path: str
   ingest_path: str
