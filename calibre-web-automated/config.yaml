@@ -1,6 +1,6 @@
 ---
 name: Calibre-Web Automated
-version: "4.0.6.7"
+version: "4.0.6.8"
 # version: "dev"
 slug: calibre-web-automated
 description: Self-hosted ebook library with automatic ingest, conversion, and metadata
@@ -30,6 +30,10 @@ options:
   hardcover_token: ""
   trusted_proxy_count: 1
   log_level: info
+  tailscale_enabled: false
+  tailscale_hostname: calibre
+  tailscale_authkey: ""
+  tailscale_serve: http
 schema:
   library_path: str
   ingest_path: str
@@ -39,6 +43,10 @@ schema:
   hardcover_token: password?
   trusted_proxy_count: int(1,10)
   log_level: list(trace|debug|info|notice|warning|error|fatal)?
+  tailscale_enabled: bool
+  tailscale_hostname: str
+  tailscale_authkey: password?
+  tailscale_serve: list(none|http|https)
 backup_exclude:
   - "*/cwa.log"
   - "*/processed_books/*"

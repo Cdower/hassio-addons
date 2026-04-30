@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Optional Tailscale sidecar (`tailscale_enabled`, `tailscale_hostname`, `tailscale_authkey`, `tailscale_serve`). Runs `tailscaled` inside the add-on container in userspace-networking mode, so the tailnet can reach CWA at `http://<hostname>/` (default `calibre`) without granting the CWA process outbound access to other tailnet hosts. Tailscale state is persisted to `/data/tailscale` so the auth key is only needed on first start. See `DOCS.md` → "Tailscale sidecar" for setup. The Tailscale binary is bundled but idle when `tailscale_enabled: false`.
+
 ### Changed
 
 - Sidebar now opens CWA in a new tab (via `webui`) instead of in an iframe (Ingress). Root cause: CWA emits absolute redirects (e.g. `Location: /login`) without an Ingress URL prefix, because HA Ingress doesn't add `X-Script-Name`/`X-Forwarded-Prefix` to forwarded requests and CWA has no env var for `SCRIPT_NAME` / `APPLICATION_ROOT`. Result was a 404 on `/login` after the sidebar redirect. Direct port access (`http://<host>:8083`) sidesteps the prefix problem entirely.

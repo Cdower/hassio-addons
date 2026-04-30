@@ -1,0 +1,28 @@
+#!/command/with-contenv bashio
+# ==============================================================================
+# Run tailscaled as an in-container sidecar.
+# Userspace networking is intentional: it lets the tailnet reach CWA on this
+# device, but the CWA process itself can't talk OUT to other tailnet machines
+# via Tailscale. That's the "no extra network access" property — enabling the
+# sidecar exposes calibre to the tailnet without granting calibre a route into
+# the rest of the tailnet.
+# ==============================================================================
+set -e
+
+if ! bashio::config.true 'tailscale_enabled'; then
+    bashio::log.info "Tailscale sidecar disabled (tailscale_enabled=false)"
+    # Idle so s6 keeps the service "up" without restart loops. sleep is cheap
+    # (~100KB resident) and lets the user toggle the option on by restarting
+    # the add-on, without a separate "off" code path here.
+    exec sleep infinity
+fi
+
+STATE_DIR=/data/tailscale
+mkdir -p "${STATE_DIR}" /var/run/tailscale
+
+bashio::log.info "Starting tailscaled (userspace networking, state=${STATE_DIR})"
+exec /usr/sbin/tailscaled \
+    --tun=userspace-networking \
+    --state="${STATE_DIR}/tailscaled.state" \
+    --statedir="${STATE_DIR}" \
+    --socket=/var/run/tailscale/tailscaled.sock

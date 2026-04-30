@@ -20,7 +20,10 @@ ENV PUID=1000 \
 
 # Install bashio so init scripts can use bashio::config / bashio::log.
 # Upstream image is Ubuntu Noble (LSIO base) — jq is already present but pin it.
+# Tailscale is bundled so the optional sidecar can be enabled at runtime via
+# config without a rebuild. Version-pinned to keep image builds reproducible.
 ARG BASHIO_VERSION="0.16.2"
+ARG TAILSCALE_VERSION="1.96.4"
 # hadolint ignore=DL3008
 RUN \
     apt-get update \
@@ -28,10 +31,19 @@ RUN \
         jq \
         curl \
         ca-certificates \
+        gnupg \
+        iptables \
     && curl -fsSL "https://github.com/hassio-addons/bashio/archive/v${BASHIO_VERSION}.tar.gz" \
         | tar -xzf - -C /tmp \
     && mv "/tmp/bashio-${BASHIO_VERSION}/lib" /usr/lib/bashio \
     && ln -s /usr/lib/bashio/bashio /usr/bin/bashio \
+    && curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg \
+        -o /usr/share/keyrings/tailscale-archive-keyring.gpg \
+    && curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/noble.tailscale-keyring.list \
+        -o /etc/apt/sources.list.d/tailscale.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        "tailscale=${TAILSCALE_VERSION}" \
     && rm -rf "/tmp/bashio-${BASHIO_VERSION}" /var/lib/apt/lists/*
 
 COPY rootfs /

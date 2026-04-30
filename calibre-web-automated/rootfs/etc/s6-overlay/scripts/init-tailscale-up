@@ -1,0 +1,68 @@
+#!/command/with-contenv bashio
+# ==============================================================================
+# Bring the tailscale node up and (optionally) configure tailscale serve to
+# expose CWA on the tailnet. Runs as a oneshot after tailscaled is started.
+# ==============================================================================
+set -e
+
+if ! bashio::config.true 'tailscale_enabled'; then
+    exit 0
+fi
+
+HOSTNAME=$(bashio::config 'tailscale_hostname')
+AUTHKEY=$(bashio::config 'tailscale_authkey')
+SERVE_MODE=$(bashio::config 'tailscale_serve')
+
+if ! bashio::var.has_value "${HOSTNAME}"; then
+    bashio::exit.nok "tailscale_hostname must not be empty when tailscale_enabled is true"
+fi
+
+# Wait for tailscaled's local API socket. tailscaled starts in parallel and
+# may still be initializing when we get here.
+bashio::log.info "Waiting for tailscaled socket..."
+for _ in $(seq 1 30); do
+    [ -S /var/run/tailscale/tailscaled.sock ] && break
+    sleep 1
+done
+if [ ! -S /var/run/tailscale/tailscaled.sock ]; then
+    bashio::exit.nok "tailscaled socket did not appear within 30s"
+fi
+
+UP_ARGS=(
+    --hostname="${HOSTNAME}"
+    --accept-routes=false
+    --accept-dns=false
+)
+if bashio::var.has_value "${AUTHKEY}"; then
+    UP_ARGS+=(--authkey="${AUTHKEY}")
+fi
+
+bashio::log.info "Bringing tailscale up as '${HOSTNAME}'"
+# If no authkey is set and there's no saved login, `tailscale up` will print
+# an auth URL to the addon log; the user clicks it to authenticate the device.
+# Subsequent restarts reuse the persisted state in /data/tailscale.
+if ! tailscale up "${UP_ARGS[@]}"; then
+    bashio::log.error "tailscale up failed. Check the log for an auth URL or supply tailscale_authkey."
+    exit 1
+fi
+
+case "${SERVE_MODE}" in
+    none)
+        bashio::log.info "tailscale_serve=none — skipping serve config (CWA reachable at \${tailnet-ip}:8083)"
+        # Clear any stale serve config from a previous run.
+        tailscale serve reset > /dev/null 2>&1 || true
+        ;;
+    https)
+        bashio::log.info "Configuring tailscale serve: HTTPS 443 -> http://127.0.0.1:8083"
+        bashio::log.info "Requires HTTPS certificates enabled in your tailnet (admin console -> DNS -> HTTPS Certificates)."
+        tailscale serve reset > /dev/null 2>&1 || true
+        tailscale serve --bg --https=443 http://127.0.0.1:8083
+        ;;
+    http|*)
+        bashio::log.info "Configuring tailscale serve: HTTP 80 -> http://127.0.0.1:8083"
+        tailscale serve reset > /dev/null 2>&1 || true
+        tailscale serve --bg --http=80 http://127.0.0.1:8083
+        ;;
+esac
+
+bashio::log.info "Tailscale ready. CWA reachable on your tailnet as '${HOSTNAME}'."

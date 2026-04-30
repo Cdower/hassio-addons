@@ -18,6 +18,10 @@
 | `hardcover_token`     | _(empty)_                | API token for [Hardcover](https://hardcover.app) metadata enrichment.                                                    |
 | `trusted_proxy_count` | `1`                      | Number of reverse proxies in front of CWA whose `X-Forwarded-*` headers should be trusted. Use `1` only when the add-on is behind exactly one reverse proxy (Cloudflare, nginx-proxy-manager, Traefik, etc.). Set higher for chained proxies. For direct access with no reverse proxy, use a lower value such as `0` if supported, rather than trusting forwarded headers from clients. |
 | `log_level`           | `info`                   | One of `trace`, `debug`, `info`, `notice`, `warning`, `error`, `fatal`.                                                  |
+| `tailscale_enabled`   | `false`                  | Run a Tailscale sidecar inside this add-on so CWA is reachable from your tailnet. See "Tailscale sidecar" below.         |
+| `tailscale_hostname`  | `calibre`                | Hostname the add-on registers in your tailnet. With MagicDNS on, you reach CWA at `http://<hostname>/` from any tailnet device. |
+| `tailscale_authkey`   | _(empty)_                | Tailscale auth key for first-time login. Leave empty to authenticate interactively (an auth URL is printed to the add-on log). After login, state persists in `/data/tailscale` and the key is no longer required. |
+| `tailscale_serve`     | `http`                   | `http` (port 80, plain HTTP — recommended for the "type `calibre` in browser" use case), `https` (port 443, requires HTTPS certs enabled in your tailnet admin console), or `none` (skip serve; CWA is reachable at `http://<hostname>:8083`). |
 
 ## Setup paths
 
@@ -44,6 +48,45 @@ Leave the defaults. The add-on creates `/share/calibre/library` and `/share/cali
    - Restart the add-on.
 
 > Switching `config_path` after the add-on has run reseeds the new target from whatever `/config` points to at startup. On a brand-new install that's the image defaults; on an existing install it's typically your previous persistent `/config`. If the config you want to keep is *not* what `/config` points to when the add-on starts, copy it into the new target manually *before* restarting.
+
+## Tailscale sidecar
+
+Optional. Enable this if you want CWA reachable from your [Tailscale](https://tailscale.com) tailnet — for example, typing `calibre` in your browser from any device on your tailnet and landing on the CWA UI.
+
+This is a **sidecar**, not a host-level Tailscale install: the tailscaled process runs *inside* this add-on's container, in [userspace networking mode](https://tailscale.com/kb/1112/userspace-networking). That mode is intentional — it lets the tailnet reach CWA on this device, but CWA itself can't talk *out* to other tailnet machines via Tailscale. Enabling the sidecar exposes Calibre to the tailnet without granting Calibre a route into the rest of the tailnet, which is the property you want if you don't trust the upstream image to be on your private network.
+
+Compare with the official [Tailscale add-on](https://github.com/hassio-addons/addon-tailscale): that one connects all of Home Assistant (and everything HA can reach on its LAN) to your tailnet. The sidecar here connects only the CWA service.
+
+### Setup
+
+1. **Generate an auth key** in the [Tailscale admin console](https://login.tailscale.com/admin/settings/keys). A reusable, non-ephemeral key is fine; it's only used once. Optional but recommended: tag the key (`tag:calibre`) so you can write ACLs that scope what the sidecar can do.
+2. **Enable in the add-on config**:
+   ```yaml
+   tailscale_enabled: true
+   tailscale_hostname: calibre        # or whatever name you want to type
+   tailscale_authkey: tskey-auth-...  # paste the key here; remove after first start if you like
+   tailscale_serve: http              # default: HTTP on port 80 of the tailnet device
+   ```
+3. **Restart** the add-on. On first start, the sidecar registers `calibre` with your tailnet using the auth key. State is persisted to `/data/tailscale` so subsequent restarts don't need the key.
+4. **Visit** `http://calibre/` from any tailnet device. (With [MagicDNS](https://tailscale.com/kb/1081/magicdns) enabled — which it is by default for personal tailnets — short hostnames work; otherwise use the full `calibre.<tailnet>.ts.net`.)
+
+If you leave `tailscale_authkey` empty, the add-on log will print an auth URL on first start; click it within ~5 minutes to log the device in interactively.
+
+### Serve modes
+
+- `http` (default): proxies the tailnet device's port 80 to CWA's `127.0.0.1:8083`. Plain HTTP, no certificates needed. Best fit for "type `calibre` in browser" — typing a bare hostname into a browser defaults to `http://`, and there's no cert hostname to mismatch.
+- `https`: proxies the tailnet device's port 443 to CWA. Requires [HTTPS certificates](https://tailscale.com/kb/1153/enabling-https) enabled in your tailnet (admin console → DNS → HTTPS Certificates). The browser bar will show the full `https://calibre.<tailnet>.ts.net/` because the cert is for the FQDN.
+- `none`: don't run `tailscale serve`. CWA is still reachable at `http://calibre:8083` (the raw port, since the device itself is on the tailnet). Use this if you want to manage `tailscale serve` / `tailscale funnel` manually.
+
+### Tailscale services (advanced)
+
+[Tailscale services](https://tailscale.com/docs/features/tailscale-services) let multiple devices back the same service name with shared ACLs (e.g. a CWA instance per HA box, all reachable as `calibre`). That requires admin-console configuration and a Premium tailnet plan; it's not auto-configured by this add-on. If you want it, set `tailscale_serve: none` to opt out of auto-serve and configure the service manually via `tailscale set` after first start.
+
+### Caveats
+
+- This add-on uses Tailscale's userspace networking, so the **CWA process cannot reach other tailnet hosts**. That's the point — but if you also want CWA to *fetch* from a tailnet resource, you need a different setup (run Tailscale on the host or in another container).
+- Auth key persistence: once authenticated, you can clear `tailscale_authkey` from config; the saved state in `/data/tailscale` keeps the device logged in across restarts and add-on upgrades. Uninstalling the add-on wipes `/data` and removes the device from your tailnet on next admin-console expiry.
+- The Tailscale binary is bundled in the image regardless of `tailscale_enabled`. When disabled, the sidecar service is held idle (no traffic, no auth, no tailnet presence).
 
 ## Plugins (`customize.py.json` gotcha)
 
