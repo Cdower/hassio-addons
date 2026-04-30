@@ -106,6 +106,17 @@ jobs:
         env:
           SHELLCHECK_OPTS: -s bash
 
+  lint-prek:
+    name: prek
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Run prek hooks
+        uses: j178/prek-action@6ad80277337ad479fe43bd70701c3f7f8aa74db3  # v2.0.3
+
   lint-yamllint:
     name: YAMLLint
     runs-on: ubuntu-latest
@@ -124,6 +135,7 @@ jobs:
       - lint-app
       - lint-hadolint
       - lint-json
+      - lint-prek
       - lint-shellcheck
       - lint-yamllint
     runs-on: ${{ matrix.architecture == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
