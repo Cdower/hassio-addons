@@ -17,6 +17,7 @@ TS=/opt/tailscale/tailscale
 # within ~1s. Returns 0 if found, 1 on timeout.
 wait_for_sock() {
     local i
+    # shellcheck disable=SC2034
     for i in $(seq 1 30); do
         if [ -S "${SOCK}" ]; then
             return 0
