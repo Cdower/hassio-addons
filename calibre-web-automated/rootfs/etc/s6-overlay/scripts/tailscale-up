@@ -70,7 +70,9 @@ fi
 
 AUTHKEY=$(bashio::config 'tailscale_authkey')
 HOSTNAME=$(bashio::config 'tailscale_hostname')
-EXTRA_ARGS=$(bashio::config 'tailscale_extra_args')
+# Parse into an array so each flag becomes a distinct argv element and shell
+# metacharacters in user input are never interpreted by the shell.
+read -ra EXTRA_ARGS <<< "$(bashio::config 'tailscale_extra_args')"
 
 # Default the tailnet hostname to the add-on slug if the user didn't pick one.
 if ! bashio::var.has_value "${HOSTNAME}"; then
@@ -83,15 +85,12 @@ bashio::log.info "Bringing tailnet node up as ${HOSTNAME}..."
 # effect on restart instead of inheriting old prefs from tailscaled.state.
 # --accept-dns=false because the add-on shouldn't override its container
 # resolver from MagicDNS — CWA queries Hardcover/Goodreads, not tailnet hosts.
-# Word-splitting EXTRA_ARGS is intentional so users can pass multiple flags
-# via the single config field.
-# shellcheck disable=SC2086
 if ! "${TS}" --socket="${SOCK}" up \
     --authkey="${AUTHKEY}" \
     --hostname="${HOSTNAME}" \
     --accept-dns=false \
     --reset \
-    ${EXTRA_ARGS}; then
+    "${EXTRA_ARGS[@]}"; then
     bashio::log.error "tailscale up failed (auth key expired/invalid, or network unreachable). CWA is still available on :8083."
     exit 0
 fi
