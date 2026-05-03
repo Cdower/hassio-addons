@@ -58,7 +58,7 @@ If you set `plugins_path`, you also need a `customize.py.json` file at `/config/
 
 The add-on can join your tailnet as its own node, separate from the Home Assistant host. This is useful if you want to ACL/tag CWA independently, or reach it remotely without putting the rest of HA on the tailnet. Leave `tailscale_authkey` empty to disable.
 
-How it works: `tailscaled` runs as a second process inside the add-on's container in [userspace networking mode](https://tailscale.com/docs/concepts/userspace-networking) — no `/dev/net/tun`, no extra capabilities. `tailscale serve` proxies tailnet HTTPS traffic to CWA's local `127.0.0.1:8083`. Tailscale state is persisted under `/data/tailscaled/` so the node identity survives add-on upgrades and is included in HA backups.
+How it works: `tailscaled` runs as a second process inside the add-on's container in [userspace networking mode](https://tailscale.com/docs/concepts/userspace-networking) — no `/dev/net/tun`, no extra capabilities. `tailscale serve` proxies tailnet HTTPS traffic to CWA's local `127.0.0.1:8083`. Tailscale state is persisted under `/data/tailscaled/` so the node identity survives add-on upgrades and is included in HA backups. **Important:** this state includes the node's private keys and identity material, so any HA backup containing `/data/tailscaled/` should be treated as sensitive. Restoring that state onto another instance effectively clones the same Tailscale node identity unless you remove `/data/tailscaled/` and re-authenticate the node.
 
 ### Setup
 
