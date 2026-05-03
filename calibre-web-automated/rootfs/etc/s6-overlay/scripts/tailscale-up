@@ -93,6 +93,10 @@ if ! "${TS}" --socket="${SOCK}" up \
     --reset \
     "${EXTRA_ARGS[@]}"; then
     bashio::log.error "tailscale up failed (auth key expired/invalid, or network unreachable). CWA is still available on :8083."
+    # Best-effort: still reconcile serve/Funnel state so stale rules from
+    # tailscaled.state do not remain active when the current add-on config
+    # has tailscale_serve/tailscale_funnel disabled.
+    apply_serve_state || true
     exit 0
 fi
 
