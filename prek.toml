@@ -1,0 +1,17 @@
+# Configuration for prek (https://prek.j178.dev).
+# Install hooks locally with `prek install`; run against the whole tree with
+# `prek run --all-files`. CI runs the same hooks via .github/workflows/ci.yaml.
+
+[[repos]]
+repo = "https://github.com/shellcheck-py/shellcheck-py"
+rev = "745eface02aef23e168a8afb6b5737818efbea95" # "v0.11.0.1"
+
+[[repos.hooks]]
+id = "shellcheck"
+args = ["--shell=bash"]
+# init-cwa-paths uses `#!/command/with-contenv bashio`, which identify doesn't
+# recognise as a shell shebang, so match by path instead of relying on type
+# detection. Covers any future .sh files plus extension-less scripts under
+# s6-overlay/scripts/.
+types = ["file"]
+files = '(\.sh$|/s6-overlay/scripts/[^/]+$)'
