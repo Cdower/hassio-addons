@@ -1,0 +1,31 @@
+#!/command/with-contenv bashio
+# ==============================================================================
+# Run tailscaled in userspace networking mode so the add-on doesn't need
+# /dev/net/tun, NET_ADMIN, or NET_RAW. `tailscale serve` (configured by the
+# tailscale-up oneshot) exposes CWA at https://<hostname>.<tailnet>.ts.net
+# without changing the existing 8083/tcp Web UI mapping.
+# ==============================================================================
+set -e
+
+# When tailscale_authkey is empty we don't want a crashlooping daemon — just
+# park the longrun so s6 considers the service healthy and CWA continues to
+# serve on :8083 as if the Tailscale feature weren't enabled.
+if ! bashio::config.has_value 'tailscale_authkey'; then
+    bashio::log.info "tailscale_authkey not set — skipping tailscaled"
+    exec sleep infinity
+fi
+
+bashio::log.info "Starting tailscaled (userspace networking)..."
+
+# Persist node identity and prefs under /data so they survive add-on upgrades.
+# /data is in HA backups by default, so the tailnet identity also gets backed
+# up — restoring the add-on rejoins the tailnet as the same node.
+mkdir -p /data/tailscaled /var/run/tailscale
+
+exec /opt/tailscale/tailscaled \
+    --state=/data/tailscaled/tailscaled.state \
+    --statedir=/data/tailscaled \
+    --socket=/var/run/tailscale/tailscaled.sock \
+    --tun=userspace-networking \
+    --port=41641 \
+    --no-logs-no-support

@@ -34,6 +34,31 @@ RUN \
     && ln -s /usr/lib/bashio/bashio /usr/bin/bashio \
     && rm -rf "/tmp/bashio-${BASHIO_VERSION}" /var/lib/apt/lists/*
 
+# Install Tailscale. Userspace networking mode (set via the s6 run script)
+# means no /dev/net/tun, NET_ADMIN, or NET_RAW required — tailscaled runs as
+# a userspace SOCKS/HTTP proxy and `tailscale serve` exposes localhost:8083
+# to the tailnet. Tarball is fetched over HTTPS from the official publisher
+# and verified against per-arch sha256 pinned below; bump TAILSCALE_VERSION
+# and both hashes together when upgrading.
+ARG TAILSCALE_VERSION="1.96.4"
+ARG TAILSCALE_SHA256_AMD64="a1cba18826b1f91cb25ef7f5b8259b5258339b42db7867af9269e21829ea78cc"
+ARG TAILSCALE_SHA256_ARM64="a27249bc70d7b37a68f8be7f5c4507ea5f354e592dce43cb5d4f3e742b313c3c"
+RUN \
+    case "${BUILD_ARCH}" in \
+        amd64) TS_ARCH=amd64; TS_SHA256="${TAILSCALE_SHA256_AMD64}" ;; \
+        aarch64) TS_ARCH=arm64; TS_SHA256="${TAILSCALE_SHA256_ARM64}" ;; \
+        *) echo "Unsupported BUILD_ARCH: ${BUILD_ARCH}" >&2; exit 1 ;; \
+    esac \
+    && mkdir -p /opt/tailscale \
+    && curl -fsSL -o /tmp/tailscale.tgz \
+        "https://pkgs.tailscale.com/stable/tailscale_${TAILSCALE_VERSION}_${TS_ARCH}.tgz" \
+    && echo "${TS_SHA256}  /tmp/tailscale.tgz" | sha256sum -c - \
+    && tar -xzf /tmp/tailscale.tgz -C /opt/tailscale --strip-components=1 \
+    && rm -f /tmp/tailscale.tgz \
+    && rm -rf /opt/tailscale/systemd \
+    && ln -sf /opt/tailscale/tailscale /usr/local/bin/tailscale \
+    && ln -sf /opt/tailscale/tailscaled /usr/local/bin/tailscaled
+
 COPY rootfs /
 
 LABEL \

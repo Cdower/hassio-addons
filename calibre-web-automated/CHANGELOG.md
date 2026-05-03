@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Optional embedded Tailscale: when `tailscale_authkey` is set, the add-on joins the tailnet as its own node (separate identity from the HA host) and `tailscale serve` exposes the CWA UI at `https://<tailscale_hostname>.<tailnet>.ts.net`. Runs `tailscaled` in userspace networking mode so no `/dev/net/tun`, `NET_ADMIN`, or `NET_RAW` is required, and the existing 8083/tcp Web UI mapping is unchanged. State persists under `/data/tailscaled/` so node identity survives add-on upgrades and HA backups. New options: `tailscale_authkey`, `tailscale_hostname`, `tailscale_serve`, `tailscale_funnel`, `tailscale_extra_args`. Funnel additionally requires admin-console opt-in.
+
 ### Changed
 
 - Sidebar now opens CWA in a new tab (via `webui`) instead of in an iframe (Ingress). Root cause: CWA emits absolute redirects (e.g. `Location: /login`) without an Ingress URL prefix, because HA Ingress doesn't add `X-Script-Name`/`X-Forwarded-Prefix` to forwarded requests and CWA has no env var for `SCRIPT_NAME` / `APPLICATION_ROOT`. Result was a 404 on `/login` after the sidebar redirect. Direct port access (`http://<host>:8083`) sidesteps the prefix problem entirely.
