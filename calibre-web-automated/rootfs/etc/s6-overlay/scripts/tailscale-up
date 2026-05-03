@@ -74,7 +74,7 @@ HOSTNAME=$(bashio::config 'tailscale_hostname')
 # metacharacters in user input are never interpreted by the shell.
 read -ra EXTRA_ARGS <<< "$(bashio::config 'tailscale_extra_args')"
 
-# Default the tailnet hostname to the add-on slug if the user didn't pick one.
+# Default the tailnet hostname to `cwa` if the user didn't pick one.
 if ! bashio::var.has_value "${HOSTNAME}"; then
     HOSTNAME="cwa"
 fi
