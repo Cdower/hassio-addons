@@ -99,7 +99,7 @@ Tailnet ACLs (admin console → Access controls):
 Equivalent to running, after the node is up:
 
 ```sh
-tailscale serve --bg --https=443 http://127.0.0.1:8083
+tailscale serve --bg --service=svc:calibre --https=443 http://127.0.0.1:8083
 ```
 
 (which is exactly what the add-on's init script does on each restart). You can inspect the resulting JSON-form config from the add-on shell with `tailscale serve status --json`.
