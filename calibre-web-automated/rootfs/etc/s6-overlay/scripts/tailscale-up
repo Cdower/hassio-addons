@@ -44,7 +44,7 @@ apply_serve_state() {
     fi
 
     bashio::log.info "Configuring tailscale serve → http://127.0.0.1:8083"
-    if ! "${TS}" --socket="${SOCK}" serve --bg --https=443 http://127.0.0.1:8083; then
+    if ! "${TS}" --socket="${SOCK}" serve --bg --service=svc:calibre --https=443 http://127.0.0.1:8083; then
         bashio::log.error "tailscale serve failed; CWA still reachable on :8083"
         return 1
     fi
