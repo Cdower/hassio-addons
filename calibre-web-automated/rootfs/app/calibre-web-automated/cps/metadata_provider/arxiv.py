@@ -1,6 +1,28 @@
 # -*- coding: utf-8 -*-
 # Calibre-Web Automated metadata provider for arXiv.org
+#
+# Based on the arXiv plugin for Calibre from the "metadata-sources" project:
+#     https://github.com/aroig/metadata-sources
+#     Copyright 2012 Abdó Roig-Maranges <abdo.roig@gmail.com>
+#
+# Rewritten for the Calibre-Web Automated metadata-provider interface
+# (cps.services.Metadata) against the arXiv Atom API.
+# Copyright 2026 Calibre-Web Automated arXiv provider contributors
+#
 # SPDX-License-Identifier: GPL-3.0-or-later
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 # Drop this file into  cps/metadata_provider/  inside the CWA container and
 # restart. CWA auto-discovers every .py file in that directory, so no further
