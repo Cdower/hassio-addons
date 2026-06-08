@@ -115,6 +115,24 @@ jobs:
       - name: Run YAMLLint
         uses: frenck/action-yamllint@34b4bbcaeabedcfefad6adea8c5bbc42af0e2d47  # v1.5
 
+  test-app:
+    name: Test App
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        with:
+          # Match the Python shipped by the CWA base image (Dockerfile).
+          python-version: "3.13"
+      - name: Install test dependencies
+        run: pip install pytest
+      - name: Run provider tests
+        run: pytest calibre-web-automated/tests/ -v
+
   build:
     name: Build (${{ matrix.architecture }})
     needs:
@@ -124,6 +142,7 @@ jobs:
       - lint-json
       - lint-prek
       - lint-yamllint
+      - test-app
     runs-on: ${{ matrix.architecture == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
