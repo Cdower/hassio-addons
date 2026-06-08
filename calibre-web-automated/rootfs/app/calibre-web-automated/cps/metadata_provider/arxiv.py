@@ -62,21 +62,21 @@ class Arxiv(Metadata):
         # otherwise do a free-text search across all fields.
         id_match = self.ID_RE.match(query)
         if id_match:
-            params = "id_list=%s&max_results=%d" % (
-                quote(id_match.group(1)),
-                self.MAX_RESULTS,
-            )
+            params = f"id_list={quote(id_match.group(1))}&max_results={self.MAX_RESULTS}"
         else:
             title_tokens = list(self.get_title_tokens(query, strip_joiners=False))
-            search_terms = "+".join(quote(t.encode("utf-8")) for t in title_tokens) \
-                if title_tokens else quote(query.encode("utf-8"))
-            params = "search_query=all:%s&start=0&max_results=%d&sortBy=relevance" % (
-                search_terms,
-                self.MAX_RESULTS,
+            search_terms = (
+                "+".join(quote(t.encode("utf-8")) for t in title_tokens)
+                if title_tokens
+                else quote(query.encode("utf-8"))
+            )
+            params = (
+                f"search_query=all:{search_terms}"
+                f"&start=0&max_results={self.MAX_RESULTS}&sortBy=relevance"
             )
 
         try:
-            resp = requests.get("%s?%s" % (self.SEARCH_URL, params), timeout=20)
+            resp = requests.get(f"{self.SEARCH_URL}?{params}", timeout=20)
             resp.raise_for_status()
         except Exception as e:
             log.warning("arXiv request failed: %s", e)
