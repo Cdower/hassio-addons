@@ -225,6 +225,35 @@ def test_parse_entry_full_record():
     assert "  " not in m.description and "\n" not in m.description
 
 
+def test_default_cover_preserved_when_none_supplied():
+    # With no generic_cover argument, MetaRecord's default generic-cover
+    # path must be kept rather than blanked to "".
+    a = _ARX.Arxiv()
+    m = a.search("1706.03762")[0]
+    assert m.cover == os.path.join("/static", "generic_cover.svg")
+
+
+def test_generic_cover_used_when_supplied():
+    a = _ARX.Arxiv()
+    m = a.search("1706.03762", generic_cover="/covers/fallback.png")[0]
+    assert m.cover == "/covers/fallback.png"
+
+
+def test_entry_without_id_text_is_skipped():
+    # An entry whose <id> is empty must not surface a broken match.
+    a = _ARX.Arxiv()
+    no_id = b"""<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry><id></id><title>Ghost Entry</title></entry>
+</feed>"""
+    orig = _REQUESTS.get
+    _REQUESTS.get = lambda *a, **k: _REQUESTS._Resp(no_id)
+    try:
+        assert a.search("attention is all you need") == []
+    finally:
+        _REQUESTS.get = orig
+
+
 def test_free_text_branch():
     a = _ARX.Arxiv()
     results = a.search("attention is all you need")   # free-text branch

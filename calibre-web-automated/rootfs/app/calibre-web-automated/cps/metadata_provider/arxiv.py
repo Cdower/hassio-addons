@@ -120,16 +120,19 @@ class Arxiv(Metadata):
     def _parse_entry(self, entry, generic_cover: str) -> Optional[MetaRecord]:
         title_el = entry.find("atom:title", self.NS)
         id_el = entry.find("atom:id", self.NS)
-        if title_el is None or id_el is None or not (title_el.text or "").strip():
+        if title_el is None or id_el is None:
             return None
 
+        title = " ".join((title_el.text or "").split())
         # The <id> is a URL like http://arxiv.org/abs/2301.01234v3
         abs_url = (id_el.text or "").strip()
         arxiv_id = abs_url.rsplit("/abs/", 1)[-1] if "/abs/" in abs_url else abs_url
         # Bare id without version, used as the calibre identifier value
         bare_id = re.sub(r"v\d+$", "", arxiv_id)
-
-        title = " ".join((title_el.text or "").split())
+        # Skip entries missing a usable title or id rather than surface a
+        # broken match (empty title / url / identifier) in the UI.
+        if not title or not bare_id:
+            return None
 
         authors = [
             " ".join((name.text or "").split())
@@ -153,7 +156,11 @@ class Arxiv(Metadata):
         )
 
         match.description = description
-        match.cover = generic_cover  # arXiv has no cover art
+        # arXiv has no cover art: use the caller's generic cover when one is
+        # supplied, otherwise keep MetaRecord's default generic-cover path
+        # instead of blanking it.
+        if generic_cover:
+            match.cover = generic_cover
         match.publisher = "arXiv"
         match.publishedDate = self._parse_date(entry)
         match.tags = self._parse_categories(entry)
