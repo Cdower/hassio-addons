@@ -1,0 +1,39 @@
+#!/command/with-contenv bashio
+# ==============================================================================
+# Reconcile CWA's reverse-proxy header login with the Cloudflare Access
+# options, and pre-create users from `access_users`. Runs after cwa-init
+# (so /config is bind-mounted and app.db exists) and before CWA starts.
+#
+# Optional feature — failures are logged but never block startup. The
+# sentinel records that *this add-on* enabled header login, so we only ever
+# flip it back off if we turned it on (a user's own external-proxy setup is
+# left alone).
+# ==============================================================================
+
+SENTINEL=/data/.cwa-access-managed
+SETUP=/opt/cwa-access/setup_access.py
+
+if [ "${CWA_ACCESS_ENABLED}" = "true" ]; then
+    if bashio::config 'access_users' \
+            | /lsiopy/bin/python3 "${SETUP}" enable; then
+        touch "${SENTINEL}"
+    else
+        bashio::log.warning \
+            "Cloudflare Access setup failed (see above); continuing startup — sign-in through Cloudflare may not work"
+    fi
+else
+    if [ -f "${SENTINEL}" ]; then
+        bashio::log.info "Cloudflare Access disabled — turning reverse-proxy header login back off"
+        if /lsiopy/bin/python3 "${SETUP}" disable; then
+            rm -f "${SENTINEL}"
+        else
+            bashio::log.warning "Could not disable reverse-proxy header login; will retry on next start"
+        fi
+    else
+        # Safety net: header login enabled by hand while CWA is directly
+        # exposed on :8083 means anyone reaching it can impersonate users.
+        /lsiopy/bin/python3 "${SETUP}" warn-if-enabled || true
+    fi
+fi
+
+exit 0

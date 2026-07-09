@@ -125,6 +125,36 @@ mkdir -p /run/s6/container_environment
 echo -n "$(bashio::config 'network_share_mode')" > /run/s6/container_environment/NETWORK_SHARE_MODE
 echo -n "$(bashio::config 'hardcover_token')"    > /run/s6/container_environment/HARDCOVER_TOKEN
 echo -n "$(bashio::config 'trusted_proxy_count')" > /run/s6/container_environment/TRUSTED_PROXY_COUNT
+# Cloudflare Access mode: enabled only when BOTH options are set. When on,
+# CWA moves to loopback :8084 and nginx takes over :8083 (LAN, headers
+# stripped) and :8085 (docker-network-only, JWT-gated — the cloudflared
+# add-on's target). When off, nothing changes: CWA serves 0.0.0.0:8083.
+CF_TEAM_DOMAIN=$(bashio::config 'cloudflare_team_domain')
+CF_TEAM_DOMAIN="${CF_TEAM_DOMAIN%.cloudflareaccess.com}"  # accept either form
+CF_ACCESS_AUD=$(bashio::config 'cloudflare_access_aud')
+CWA_ACCESS_ENABLED=false
+if bashio::var.has_value "${CF_TEAM_DOMAIN}" && bashio::var.has_value "${CF_ACCESS_AUD}"; then
+    CWA_ACCESS_ENABLED=true
+    echo -n "true"               > /run/s6/container_environment/CWA_ACCESS_ENABLED
+    echo -n "8084"               > /run/s6/container_environment/CWA_PORT_OVERRIDE
+    echo -n "127.0.0.1"          > /run/s6/container_environment/CWA_BIND_ADDRESS
+    echo -n "${CF_TEAM_DOMAIN}"  > /run/s6/container_environment/CF_TEAM_DOMAIN
+    echo -n "${CF_ACCESS_AUD}"   > /run/s6/container_environment/CF_ACCESS_AUD
+    bashio::log.info "Cloudflare Access mode enabled (team: ${CF_TEAM_DOMAIN})"
+    bashio::log.info "Point the cloudflared add-on at: http://$(hostname):8085"
+    bashio::log.info "LAN password login stays on port 8083 as before"
+elif bashio::var.has_value "${CF_TEAM_DOMAIN}" || bashio::var.has_value "${CF_ACCESS_AUD}"; then
+    bashio::log.warning \
+        "cloudflare_team_domain and cloudflare_access_aud must BOTH be set — Cloudflare Access mode stays disabled"
+    echo -n "false" > /run/s6/container_environment/CWA_ACCESS_ENABLED
+else
+    echo -n "false" > /run/s6/container_environment/CWA_ACCESS_ENABLED
+fi
+if bashio::config.has_value 'access_users' && [ "${CWA_ACCESS_ENABLED}" != "true" ]; then
+    bashio::log.warning \
+        "access_users is set but Cloudflare Access mode is disabled — no users will be created (they could not sign in)"
+fi
+
 # TZ is passed in by Supervisor (ENV_TIME in supervisor/docker/const.py), so
 # read it from the env instead of hitting /supervisor/info — that endpoint
 # needs hassio_api: true and otherwise logs a "missing API permission" error

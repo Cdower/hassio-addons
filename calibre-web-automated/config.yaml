@@ -1,6 +1,6 @@
 ---
 name: Calibre-Web Automated
-version: "4.0.6.10"
+version: "4.0.6.11"
 # version: "dev"
 slug: calibre-web-automated
 description: Self-hosted ebook library with automatic ingest, conversion, and metadata
@@ -12,8 +12,12 @@ init: false
 webui: "http://[HOST]:[PORT:8083]/"
 ports:
   "8083/tcp": 8083
+  "8085/tcp": null
 ports_description:
   "8083/tcp": Web UI
+  "8085/tcp": >-
+    Cloudflare Access entry point (JWT-validated). Leave unmapped — the
+    cloudflared add-on reaches it over the internal docker network.
 map:
   - share:rw
   - media:rw
@@ -30,6 +34,9 @@ options:
   hardcover_token: ""
   trusted_proxy_count: 1
   log_level: info
+  cloudflare_team_domain: ""
+  cloudflare_access_aud: ""
+  access_users: []
   tailscale_authkey: ""
   tailscale_hostname: ""
   tailscale_serve: true
@@ -44,6 +51,10 @@ schema:
   hardcover_token: password?
   trusted_proxy_count: int(1,10)
   log_level: list(trace|debug|info|notice|warning|error|fatal)?
+  cloudflare_team_domain: str?
+  cloudflare_access_aud: password?
+  access_users:
+    - email
   tailscale_authkey: password?
   tailscale_hostname: str?
   tailscale_serve: bool

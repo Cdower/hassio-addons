@@ -1,0 +1,13 @@
+#!/command/with-contenv bashio
+# ==============================================================================
+# Cloudflare Access JWT verifier (auth_request backend for nginx :8085).
+# Parks idle when Cloudflare Access mode is disabled.
+# ==============================================================================
+
+if [ "${CWA_ACCESS_ENABLED}" != "true" ]; then
+    bashio::log.info "Cloudflare Access disabled — JWT verifier idle"
+    exec sleep infinity
+fi
+
+bashio::log.info "Starting Cloudflare Access JWT verifier on 127.0.0.1:8086"
+exec s6-setuidgid abc /lsiopy/bin/python3 /opt/cwa-access/verifier.py

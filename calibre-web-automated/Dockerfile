@@ -34,6 +34,19 @@ RUN \
     && ln -s /usr/lib/bashio/bashio /usr/bin/bashio \
     && rm -rf "/tmp/bashio-${BASHIO_VERSION}" /var/lib/apt/lists/*
 
+# nginx + PyJWT power the optional Cloudflare Access mode: nginx fronts CWA
+# (LAN header-stripping listener on 8083, JWT-gated listener on 8085) and the
+# verifier validates Cf-Access-Jwt-Assertion with PyJWT. PyJWT rides the
+# /lsiopy venv, whose `cryptography` (upstream requirements.txt) provides the
+# RS256 backend. Ubuntu's nginx-core includes http_auth_request_module.
+ARG PYJWT_VERSION="2.10.1"
+# hadolint ignore=DL3008
+RUN \
+    apt-get update \
+    && apt-get install -y --no-install-recommends nginx \
+    && rm -rf /var/lib/apt/lists/* /etc/nginx/sites-enabled/default \
+    && /lsiopy/bin/pip install --no-cache-dir "PyJWT==${PYJWT_VERSION}"
+
 # Install Tailscale. Userspace networking mode (set via the s6 run script)
 # means no /dev/net/tun, NET_ADMIN, or NET_RAW required — tailscaled runs as
 # a userspace SOCKS/HTTP proxy and `tailscale serve` exposes localhost:8083

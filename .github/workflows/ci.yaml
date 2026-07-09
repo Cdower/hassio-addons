@@ -129,7 +129,9 @@ jobs:
           # Match the Python shipped by the CWA base image (Dockerfile).
           python-version: "3.13"
       - name: Install test dependencies
-        run: pip install pytest
+        # PyJWT/cryptography/werkzeug mirror what the Cloudflare Access
+        # verifier and user-setup scripts see in the image's /lsiopy venv.
+        run: pip install pytest PyJWT cryptography werkzeug
       - name: Run provider tests
         run: pytest calibre-web-automated/tests/ -v
 

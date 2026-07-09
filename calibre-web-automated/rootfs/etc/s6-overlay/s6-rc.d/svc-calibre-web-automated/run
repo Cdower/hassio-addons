@@ -1,0 +1,19 @@
+#!/usr/bin/with-contenv bash
+# shellcheck shell=bash
+# ==============================================================================
+# ADD-ON OVERRIDE of upstream svc-calibre-web-automated/run (base image v4.0.6).
+# Only change: optional `-i $CWA_BIND_ADDRESS` so Cloudflare Access mode can pin
+# CWA to loopback (header-spoofing protection). RE-DIFF against the upstream
+# file on every base-image bump — see .claude/skills/update-base-image.
+# ==============================================================================
+
+export CALIBRE_DBPATH=/config
+
+BIND_ARGS=()
+if [[ -n "${CWA_BIND_ADDRESS:-}" ]]; then
+    BIND_ARGS=(-i "${CWA_BIND_ADDRESS}")
+fi
+
+exec \
+    s6-notifyoncheck -d -n 300 -w 1000 -c "nc -z localhost ${CWA_PORT_OVERRIDE:-8083}" \
+        cd /app/calibre-web-automated s6-setuidgid abc python3 /app/calibre-web-automated/cps.py "${BIND_ARGS[@]}"
