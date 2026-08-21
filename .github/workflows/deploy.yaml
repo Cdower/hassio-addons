@@ -8,8 +8,12 @@ on:
       - published
   workflow_dispatch:
     inputs:
+      addon:
+        description: Add-on slug to publish (defaults to every add-on)
+        required: false
+        type: string
       version:
-        description: Version override (defaults to config.yaml version)
+        description: Version override (defaults to each add-on's config.yaml version)
         required: false
         type: string
 
@@ -20,41 +24,45 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  information:
-    name: Gather addon information
+  discover:
+    name: Discover add-ons
     runs-on: ubuntu-latest
     outputs:
-      architectures: ${{ steps.info.outputs.architectures }}
-      build: ${{ steps.info.outputs.build }}
-      description: ${{ steps.info.outputs.description }}
-      name: ${{ steps.info.outputs.name }}
-      slug: ${{ steps.info.outputs.slug }}
-      target: ${{ steps.info.outputs.target }}
-      version: ${{ steps.version.outputs.version }}
+      builds: ${{ steps.discover.outputs.builds }}
       owner: ${{ steps.owner.outputs.owner }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-      - name: Read addon information
-        id: info
-        uses: frenck/action-addon-information@ce1377e9851cf569c29329e65fb2c57e67ca0f69 # v1.4.2
-      - name: Resolve version
-        id: version
+      - name: List add-ons and their architectures
+        id: discover
         env:
-          INPUT_VERSION: ${{ inputs.version }}
-          TAG_NAME: ${{ github.event.release.tag_name }}
-          ADDON_VERSION: ${{ steps.info.outputs.version }}
+          ONLY_ADDON: ${{ inputs.addon }}
         run: |
-          if [[ -n "${INPUT_VERSION}" ]]; then
-            v="${INPUT_VERSION}"
-          elif [[ -n "${TAG_NAME}" ]]; then
-            v="${TAG_NAME#v}"
-          else
-            v="${ADDON_VERSION}"
+          addons=$(
+            find . -mindepth 2 -maxdepth 2 -name config.yaml -printf '%h\n' \
+              | sed 's|^\./||' \
+              | sort \
+              | jq --raw-input --slurp --compact-output \
+                  --arg only "${ONLY_ADDON}" \
+                  'split("\n")
+                   | map(select(length > 0))
+                   | if $only == "" then . else map(select(. == $only)) end'
+          )
+          if [[ "${addons}" == "[]" ]]; then
+            echo "::error::No add-on matched ${ONLY_ADDON:-<all>}"
+            exit 1
           fi
-          echo "version=${v}" >> "$GITHUB_OUTPUT"
+
+          builds=$(
+            for addon in $(jq --raw-output '.[]' <<< "${addons}"); do
+              yq --no-colors --output-format json eval '.arch' "${addon}/config.yaml" \
+                | jq --compact-output --arg addon "${addon}" \
+                    '.[] | {addon: $addon, architecture: .}'
+            done | jq --slurp --compact-output '.'
+          )
+          echo "builds=${builds}" >> "$GITHUB_OUTPUT"
       - name: Lowercase repo owner
         id: owner
         env:
@@ -63,8 +71,8 @@ jobs:
           echo "owner=${OWNER,,}" >> "$GITHUB_OUTPUT"
 
   deploy:
-    name: Build & push (${{ matrix.architecture }})
-    needs: information
+    name: Build & push ${{ matrix.addon }} (${{ matrix.architecture }})
+    needs: discover
     permissions:
       contents: read
       packages: write
@@ -72,19 +80,39 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        architecture: ${{ fromJson(needs.information.outputs.architectures) }}
+        include: ${{ fromJson(needs.discover.outputs.builds) }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
+      - name: Read addon information
+        id: info
+        uses: frenck/action-addon-information@ce1377e9851cf569c29329e65fb2c57e67ca0f69 # v1.4.2
+        with:
+          path: "./${{ matrix.addon }}"
+      - name: Resolve version
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          ADDON_VERSION: ${{ steps.info.outputs.version }}
+        run: |
+          # The Supervisor pulls the image tag named by the add-on's own
+          # config.yaml, so that version -- not the release tag -- is what has
+          # to be published. An explicit override is honoured for re-releases.
+          if [[ -n "${INPUT_VERSION}" ]]; then
+            v="${INPUT_VERSION}"
+          else
+            v="${ADDON_VERSION}"
+          fi
+          echo "version=${v}" >> "$GITHUB_OUTPUT"
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
       - name: Compose build flags
         id: flags
         env:
           ARCHITECTURE: ${{ matrix.architecture }}
-          BUILD_FILE: ${{ needs.information.outputs.build }}
+          BUILD_FILE: ${{ steps.info.outputs.build }}
         run: |
           echo "date=$(date +"%Y-%m-%dT%H:%M:%SZ")" >> "$GITHUB_OUTPUT"
           from=$(yq --no-colors eval ".build_from.${ARCHITECTURE}" "${BUILD_FILE}")
@@ -105,20 +133,20 @@ jobs:
         with:
           push: true
           tags: |
-            ghcr.io/${{ needs.information.outputs.owner }}/${{ matrix.architecture }}-hassio-addon-${{ needs.information.outputs.slug }}:${{ needs.information.outputs.version }}
-            ghcr.io/${{ needs.information.outputs.owner }}/${{ matrix.architecture }}-hassio-addon-${{ needs.information.outputs.slug }}:latest
+            ghcr.io/${{ needs.discover.outputs.owner }}/${{ matrix.architecture }}-hassio-addon-${{ steps.info.outputs.slug }}:${{ steps.version.outputs.version }}
+            ghcr.io/${{ needs.discover.outputs.owner }}/${{ matrix.architecture }}-hassio-addon-${{ steps.info.outputs.slug }}:latest
           # zizmor: ignore[template-injection] - path input to action, not shell-executed
-          context: ${{ needs.information.outputs.target }}
-          file: ${{ needs.information.outputs.target }}/Dockerfile
+          context: ${{ steps.info.outputs.target }}
+          file: ${{ steps.info.outputs.target }}/Dockerfile
           platforms: ${{ steps.flags.outputs.platform }}
-          cache-from: type=gha,scope=${{ matrix.architecture }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.architecture }}
+          cache-from: type=gha,scope=${{ matrix.addon }}-${{ matrix.architecture }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.addon }}-${{ matrix.architecture }}
           build-args: |
             BUILD_ARCH=${{ matrix.architecture }}
             BUILD_DATE=${{ steps.flags.outputs.date }}
-            BUILD_DESCRIPTION=${{ needs.information.outputs.description }}
+            BUILD_DESCRIPTION=${{ steps.info.outputs.description }}
             BUILD_FROM=${{ steps.flags.outputs.from }}
-            BUILD_NAME=${{ needs.information.outputs.name }}
+            BUILD_NAME=${{ steps.info.outputs.name }}
             BUILD_REF=${{ github.sha }}
             BUILD_REPOSITORY=${{ github.repository }}
-            BUILD_VERSION=${{ needs.information.outputs.version }}
+            BUILD_VERSION=${{ steps.version.outputs.version }}

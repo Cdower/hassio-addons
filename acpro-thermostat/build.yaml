@@ -1,0 +1,9 @@
+---
+build_from:
+  amd64: ghcr.io/home-assistant/amd64-base-python:3.13-alpine3.24-2026.08.0
+  aarch64: ghcr.io/home-assistant/aarch64-base-python:3.13-alpine3.24-2026.08.0
+labels:
+  org.opencontainers.image.title: AC Pro Thermostat
+  org.opencontainers.image.licenses: MIT
+  org.opencontainers.image.source: https://github.com/Cdower/hassio-addons
+  org.opencontainers.image.documentation: https://github.com/Cdower/hassio-addons/tree/main/acpro-thermostat
