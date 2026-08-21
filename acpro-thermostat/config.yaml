@@ -9,8 +9,6 @@ arch:
   - amd64
   - aarch64
 init: false
-startup: application
-boot: auto
 # The control is found by UDP broadcast and replies to the source port, so the
 # add-on has to sit on the LAN rather than behind the add-on bridge network.
 host_network: true
