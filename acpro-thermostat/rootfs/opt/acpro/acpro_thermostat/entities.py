@@ -368,7 +368,13 @@ class EntityMap:
         }
 
     def _switch_columns(self, slug: str, payload: str) -> dict[str, int]:
+        # Only the two payloads the discovery config declares are accepted, so a
+        # stray retained message ("0", "toggle", an empty string) is ignored
+        # rather than read as "off" and silently written to the control.
+        wanted = {"ON": 1, "OFF": 0}.get(payload.strip().upper())
+        if wanted is None:
+            return {}
         for column in self.switches:
             if column.lower() == slug:
-                return {column: 1 if payload.upper() == "ON" else 0}
+                return {column: wanted}
         return {}

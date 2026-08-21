@@ -254,6 +254,30 @@ def test_switch_commands(entity_map: EntityMap) -> None:
 
     assert entity_map.columns_for(topic, "ON", {}) == {"StHt": 1}
     assert entity_map.columns_for(topic, "OFF", {}) == {"StHt": 0}
+    assert entity_map.columns_for(topic, " on ", {}) == {"StHt": 1}
+
+
+@pytest.mark.parametrize("payload", ["0", "1", "false", "toggle", "", "ONWARD"])
+def test_a_switch_payload_that_is_not_on_or_off_writes_nothing(
+    entity_map: EntityMap, payload: str
+) -> None:
+    """A stray retained message must not be read as "off" and written through."""
+    topic = "acpro/acpro_502cc6aabbcc/set/switch/stht"
+
+    assert entity_map.columns_for(topic, payload, {}) == {}
+
+
+def test_the_climate_entity_is_deliberately_unnamed(entity_map: EntityMap) -> None:
+    """A null name makes the entity adopt the device name (Home Assistant 2023.8+).
+
+    Giving it a string instead would render as "AC Pro Thermostat Thermostat".
+    """
+    config = entity_map.climate_config()
+
+    assert "name" in config
+    assert config["name"] is None
+    assert all(payload["name"] for key, payload in entity_map.discovery_payloads().items()
+               if key != "climate/thermostat")
 
 
 @pytest.mark.parametrize(

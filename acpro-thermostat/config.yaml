@@ -19,9 +19,11 @@ services:
 image: ghcr.io/cdower/{arch}-hassio-addon-acpro-thermostat
 options:
   device_host: ""
+  device_port: 7000
   device_name: ""
   broadcast_address: 255.255.255.255
   scan_interval: 30
+  request_timeout: 2
   encryption_version: 0
   extra_properties: []
   ignored_properties: []
