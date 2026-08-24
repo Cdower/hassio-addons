@@ -67,11 +67,17 @@ branch.
 
 ## CI on bump PRs
 
-A branch pushed with the default `GITHUB_TOKEN` does not trigger workflows, so
-by default the Bump PR arrives without check runs. If you want CI to run on it,
-add a repository secret named `BUMP_TOKEN` holding a PAT with `contents:write`
-and `pull-requests:write`; the Bump workflow prefers it and falls back to
-`GITHUB_TOKEN` when it is absent.
+Merging needs the required `CI` check, and a branch pushed with the default
+`GITHUB_TOKEN` triggers no workflow run at all — left alone, a bump PR would
+have no check to satisfy and could never merge. So the Bump workflow starts CI
+on the branch itself, which is allowed because dispatch events are exempt from
+that rule. The run reports against the branch's head commit, which is the PR's
+head commit, so the gate still sees it.
+
+That works with no setup. If you would rather have the ordinary flow, add a
+repository secret named `BUMP_TOKEN` holding a PAT with `contents:write` and
+`pull-requests:write`: the workflow pushes with it instead, CI attaches to the
+PR by itself, and the manual dispatch is skipped.
 
 ## Guard rails
 
