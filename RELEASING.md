@@ -28,13 +28,22 @@ semver.
 
 ## Cutting a release
 
-1. Bump `version:` in `<addon>/config.yaml`.
-2. Update `<addon>/CHANGELOG.md`: rename the `## [Unreleased]` heading to
-   `## [<version>] - <YYYY-MM-DD>` and start a fresh `## [Unreleased]` above
-   it. The release notes are taken verbatim from that section.
-3. Merge to `main` and let CI pass.
-4. Run the **Release** workflow (Actions → Release → Run workflow) and give it
+1. Run the **Bump** workflow (Actions → Bump → Run workflow) with the add-on
+   slug and the new version. It opens a PR that sets `version:` in
+   `<addon>/config.yaml` and promotes that add-on's changelog: the
+   `## [Unreleased]` heading becomes `## [<version>] - <YYYY-MM-DD>`, with a
+   fresh `## [Unreleased]` above it.
+2. Review and merge that PR. Check the release notes while you are there —
+   the promoted section is published verbatim. If the add-on had nothing
+   under `## [Unreleased]`, the PR says so and leaves a placeholder to
+   replace.
+3. Run the **Release** workflow (Actions → Release → Run workflow) and give it
    the add-on slug.
+
+Steps 1 and 2 are a convenience; editing `config.yaml` and `CHANGELOG.md` by
+hand in an ordinary PR does the same job. Either way the version lands on
+`main` before the release is cut, because `config.yaml` is what the Supervisor
+reads.
 
 That workflow tags the current `main` commit, publishes a GitHub release with
 the changelog section as its notes, and then builds and pushes only that
@@ -56,12 +65,23 @@ add-on's `config.yaml`; the optional `version` input overrides it, and the
 optional `ref` input builds a specific tag or commit rather than the default
 branch.
 
+## CI on bump PRs
+
+A branch pushed with the default `GITHUB_TOKEN` does not trigger workflows, so
+by default the Bump PR arrives without check runs. If you want CI to run on it,
+add a repository secret named `BUMP_TOKEN` holding a PAT with `contents:write`
+and `pull-requests:write`; the Bump workflow prefers it and falls back to
+`GITHUB_TOKEN` when it is absent.
+
 ## Guard rails
 
 The release tooling refuses to:
 
 - release an add-on whose `config.yaml` still says `version: "dev"`, the
   local-build placeholder;
+- bump to a version that sorts at or before the current one;
+- bump to an already-released version, or start a bump whose branch is still
+  open;
 - reuse a tag that already exists — bump the version instead;
 - publish a release whose tag version and `config.yaml` version disagree;
 - act on a tag that does not name a known add-on.
