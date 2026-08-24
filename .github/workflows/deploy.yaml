@@ -181,6 +181,14 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
           persist-credentials: false
+      - name: Record the commit being built
+        id: commit
+        run: |
+          set -euo pipefail
+          # github.sha is the triggering ref, which is not what got checked out
+          # when a `ref` input was given -- rebuilding an old tag would label
+          # the image with the default branch's HEAD. Report what was built.
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Read addon information
         id: info
         uses: frenck/action-addon-information@ce1377e9851cf569c29329e65fb2c57e67ca0f69 # v1.4.2
@@ -227,6 +235,6 @@ jobs:
             BUILD_DESCRIPTION=${{ steps.info.outputs.description }}
             BUILD_FROM=${{ steps.flags.outputs.from }}
             BUILD_NAME=${{ steps.info.outputs.name }}
-            BUILD_REF=${{ github.sha }}
+            BUILD_REF=${{ steps.commit.outputs.sha }}
             BUILD_REPOSITORY=${{ github.repository }}
             BUILD_VERSION=${{ needs.discover.outputs.version }}
