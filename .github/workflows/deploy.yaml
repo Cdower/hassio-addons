@@ -1,68 +1,161 @@
 ---
 name: Deploy
 
+# Publishes exactly one add-on. Releases are per add-on and are tagged
+# `<slug>-v<version>` (e.g. `calibre-web-automated-v4.0.6.10`) so that
+# releasing one add-on never re-pushes another one's images. See RELEASING.md.
+
 # yamllint disable-line rule:truthy
 on:
   release:
     types:
       - published
+  workflow_call:
+    inputs:
+      addon:
+        description: Add-on slug to publish
+        required: true
+        type: string
+      version:
+        description: Version override (defaults to the add-on's config.yaml version)
+        required: false
+        type: string
+      ref:
+        description: Git ref or SHA to build (defaults to the triggering ref)
+        required: false
+        type: string
   workflow_dispatch:
     inputs:
       addon:
-        description: Add-on slug to publish (defaults to every add-on)
-        required: false
+        description: Add-on slug to publish
+        required: true
         type: string
       version:
-        description: Version override (defaults to each add-on's config.yaml version)
+        description: Version override (defaults to the add-on's config.yaml version)
+        required: false
+        type: string
+      ref:
+        description: Git ref or SHA to build (defaults to the triggering ref)
         required: false
         type: string
 
 permissions: {}
 
 concurrency:
-  group: deploy-${{ github.ref }}
+  group: deploy-${{ inputs.addon || github.event.release.tag_name || github.ref }}
   cancel-in-progress: false
 
 jobs:
   discover:
-    name: Discover add-ons
+    name: Resolve add-on
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
-      builds: ${{ steps.discover.outputs.builds }}
+      addon: ${{ steps.resolve.outputs.addon }}
+      slug: ${{ steps.resolve.outputs.slug }}
+      version: ${{ steps.resolve.outputs.version }}
+      builds: ${{ steps.resolve.outputs.builds }}
       owner: ${{ steps.owner.outputs.owner }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          ref: ${{ inputs.ref }}
           persist-credentials: false
-      - name: List add-ons and their architectures
-        id: discover
+      - name: Resolve the add-on and version to publish
+        id: resolve
         env:
-          ONLY_ADDON: ${{ inputs.addon }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INPUT_ADDON: ${{ inputs.addon }}
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
-          addons=$(
-            find . -mindepth 2 -maxdepth 2 -name config.yaml -printf '%h\n' \
-              | sed 's|^\./||' \
-              | sort \
-              | jq --raw-input --slurp --compact-output \
-                  --arg only "${ONLY_ADDON}" \
-                  'split("\n")
-                   | map(select(length > 0))
-                   | if $only == "" then . else map(select(. == $only)) end'
-          )
-          if [[ "${addons}" == "[]" ]]; then
-            echo "::error::No add-on matched ${ONLY_ADDON:-<all>}"
+          # Index every add-on in the repo by directory and by slug.
+          dirs=()
+          slugs=()
+          while IFS= read -r config; do
+            dir="${config%/config.yaml}"
+            slug=$(yq --no-colors --exit-status eval '.slug' "${config}")
+            dirs+=("${dir}")
+            slugs+=("${slug}")
+          done < <(find . -mindepth 2 -maxdepth 2 -name config.yaml -printf '%P\n' | sort)
+
+          if [[ ${#dirs[@]} -eq 0 ]]; then
+            echo "::error::No add-on configuration files found"
             exit 1
           fi
 
+          index=-1
+          if [[ -n "${INPUT_ADDON}" ]]; then
+            # Explicit request: accept either the directory or the slug.
+            for i in "${!dirs[@]}"; do
+              if [[ "${INPUT_ADDON}" == "${dirs[i]}" || "${INPUT_ADDON}" == "${slugs[i]}" ]]; then
+                index=$i
+                break
+              fi
+            done
+            if [[ ${index} -lt 0 ]]; then
+              echo "::error::Unknown add-on '${INPUT_ADDON}'. Known slugs: ${slugs[*]}"
+              exit 1
+            fi
+          elif [[ -n "${RELEASE_TAG}" ]]; then
+            # Release tags name their add-on: `<slug>-v<version>`. Match the
+            # longest slug so that slugs sharing a prefix stay unambiguous.
+            for i in "${!slugs[@]}"; do
+              if [[ "${RELEASE_TAG}" == "${slugs[i]}-v"* ]]; then
+                if [[ ${index} -lt 0 || ${#slugs[i]} -gt ${#slugs[index]} ]]; then
+                  index=$i
+                fi
+              fi
+            done
+            if [[ ${index} -lt 0 ]]; then
+              echo "::error::Release tag '${RELEASE_TAG}' does not name an add-on."
+              echo "::error::Tag releases as <slug>-v<version>, one of: ${slugs[*]/%/-v<version>}"
+              exit 1
+            fi
+          else
+            echo "::error::No add-on to publish: not a release event and no addon input given"
+            exit 1
+          fi
+
+          addon="${dirs[index]}"
+          slug="${slugs[index]}"
+          config_version=$(yq --no-colors --exit-status eval '.version' "${addon}/config.yaml")
+
+          if [[ -n "${INPUT_VERSION}" ]]; then
+            version="${INPUT_VERSION}"
+          else
+            version="${config_version}"
+          fi
+
+          # The Supervisor pulls the image tag named by the add-on's own
+          # config.yaml, so a release tag that disagrees with it would publish
+          # images nobody can install. Fail loudly instead.
+          if [[ -n "${RELEASE_TAG}" && -z "${INPUT_VERSION}" ]]; then
+            tag_version="${RELEASE_TAG#"${slug}-v"}"
+            if [[ "${tag_version}" != "${config_version}" ]]; then
+              echo "::error::Release tag '${RELEASE_TAG}' is version '${tag_version}'," \
+                   "but ${addon}/config.yaml is '${config_version}'."
+              echo "::error::Bump config.yaml to match the tag, or re-run this workflow" \
+                   "manually with a version override."
+              exit 1
+            fi
+          fi
+
           builds=$(
-            for addon in $(jq --raw-output '.[]' <<< "${addons}"); do
-              yq --no-colors --output-format json eval '.arch' "${addon}/config.yaml" \
-                | jq --compact-output --arg addon "${addon}" \
-                    '.[] | {addon: $addon, architecture: .}'
-            done | jq --slurp --compact-output '.'
+            yq --no-colors --output-format json eval '.arch' "${addon}/config.yaml" \
+              | jq --compact-output --arg addon "${addon}" \
+                  '[.[] | {addon: $addon, architecture: .}]'
           )
-          echo "builds=${builds}" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "addon=${addon}"
+            echo "slug=${slug}"
+            echo "version=${version}"
+            echo "builds=${builds}"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Publishing ${slug} ${version} (${addon})" >> "$GITHUB_STEP_SUMMARY"
       - name: Lowercase repo owner
         id: owner
         env:
@@ -85,27 +178,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          ref: ${{ inputs.ref }}
           persist-credentials: false
       - name: Read addon information
         id: info
         uses: frenck/action-addon-information@ce1377e9851cf569c29329e65fb2c57e67ca0f69 # v1.4.2
         with:
           path: "./${{ matrix.addon }}"
-      - name: Resolve version
-        id: version
-        env:
-          INPUT_VERSION: ${{ inputs.version }}
-          ADDON_VERSION: ${{ steps.info.outputs.version }}
-        run: |
-          # The Supervisor pulls the image tag named by the add-on's own
-          # config.yaml, so that version -- not the release tag -- is what has
-          # to be published. An explicit override is honoured for re-releases.
-          if [[ -n "${INPUT_VERSION}" ]]; then
-            v="${INPUT_VERSION}"
-          else
-            v="${ADDON_VERSION}"
-          fi
-          echo "version=${v}" >> "$GITHUB_OUTPUT"
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
       - name: Compose build flags
@@ -133,7 +212,7 @@ jobs:
         with:
           push: true
           tags: |
-            ghcr.io/${{ needs.discover.outputs.owner }}/${{ matrix.architecture }}-hassio-addon-${{ steps.info.outputs.slug }}:${{ steps.version.outputs.version }}
+            ghcr.io/${{ needs.discover.outputs.owner }}/${{ matrix.architecture }}-hassio-addon-${{ steps.info.outputs.slug }}:${{ needs.discover.outputs.version }}
             ghcr.io/${{ needs.discover.outputs.owner }}/${{ matrix.architecture }}-hassio-addon-${{ steps.info.outputs.slug }}:latest
           # zizmor: ignore[template-injection] - path input to action, not shell-executed
           context: ${{ steps.info.outputs.target }}
@@ -149,4 +228,4 @@ jobs:
             BUILD_NAME=${{ steps.info.outputs.name }}
             BUILD_REF=${{ github.sha }}
             BUILD_REPOSITORY=${{ github.repository }}
-            BUILD_VERSION=${{ steps.version.outputs.version }}
+            BUILD_VERSION=${{ needs.discover.outputs.version }}

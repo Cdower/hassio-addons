@@ -19,6 +19,11 @@ https://github.com/Cdower/hassio-addons
 | **AC Pro Thermostat**     | Local control of the AC Pro X/XB-Series smart communicating touchscreen control | [README](acpro-thermostat/README.md) · [DOCS](acpro-thermostat/DOCS.md)           |
 | **Calibre-Web Automated** | Self-hosted ebook library with automatic ingest, conversion, and metadata       | [README](calibre-web-automated/README.md) · [DOCS](calibre-web-automated/DOCS.md) |
 
+## Releasing
+
+Each add-on is versioned and released on its own, tagged `<slug>-v<version>`.
+See [RELEASING.md](RELEASING.md).
+
 ## Support
 
 Open an issue at <https://github.com/Cdower/hassio-addons/issues>.

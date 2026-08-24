@@ -1,0 +1,191 @@
+---
+name: Release
+
+# Cuts a release for a single add-on: tags `<slug>-v<version>` at the current
+# commit, publishes a GitHub release with that add-on's changelog entry, then
+# builds and pushes only that add-on's images. See RELEASING.md.
+
+# yamllint disable-line rule:truthy
+on:
+  workflow_dispatch:
+    inputs:
+      addon:
+        description: Add-on slug to release (e.g. calibre-web-automated)
+        required: true
+        type: string
+      prerelease:
+        description: Mark the GitHub release as a pre-release
+        required: false
+        default: false
+        type: boolean
+      dry_run:
+        description: Resolve and print the release without creating it
+        required: false
+        default: false
+        type: boolean
+
+permissions: {}
+
+concurrency:
+  group: release-${{ inputs.addon }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Tag & release ${{ inputs.addon }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      addon: ${{ steps.resolve.outputs.addon }}
+      slug: ${{ steps.resolve.outputs.slug }}
+      version: ${{ steps.resolve.outputs.version }}
+      tag: ${{ steps.resolve.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Resolve add-on and version
+        id: resolve
+        env:
+          INPUT_ADDON: ${{ inputs.addon }}
+        run: |
+          dirs=()
+          slugs=()
+          while IFS= read -r config; do
+            dirs+=("${config%/config.yaml}")
+            slugs+=("$(yq --no-colors --exit-status eval '.slug' "${config}")")
+          done < <(find . -mindepth 2 -maxdepth 2 -name config.yaml -printf '%P\n' | sort)
+
+          index=-1
+          for i in "${!dirs[@]}"; do
+            if [[ "${INPUT_ADDON}" == "${dirs[i]}" || "${INPUT_ADDON}" == "${slugs[i]}" ]]; then
+              index=$i
+              break
+            fi
+          done
+          if [[ ${index} -lt 0 ]]; then
+            echo "::error::Unknown add-on '${INPUT_ADDON}'. Known slugs: ${slugs[*]}"
+            exit 1
+          fi
+
+          addon="${dirs[index]}"
+          slug="${slugs[index]}"
+          version=$(yq --no-colors --exit-status eval '.version' "${addon}/config.yaml")
+
+          # `version: "dev"` is the local-build placeholder; it must never be
+          # published, because every release would overwrite the same tag.
+          if [[ -z "${version}" || "${version}" == "null" || "${version}" == "dev" ]]; then
+            echo "::error::${addon}/config.yaml has version '${version}', which cannot be released"
+            exit 1
+          fi
+
+          {
+            echo "addon=${addon}"
+            echo "slug=${slug}"
+            echo "version=${version}"
+            echo "tag=${slug}-v${version}"
+          } >> "$GITHUB_OUTPUT"
+      - name: Check the tag is free
+        env:
+          TAG: ${{ steps.resolve.outputs.tag }}
+          ADDON: ${{ steps.resolve.outputs.addon }}
+        run: |
+          if git rev-parse --verify --quiet "refs/tags/${TAG}" > /dev/null; then
+            echo "::error::Tag ${TAG} already exists." \
+                 "Bump the version in ${ADDON}/config.yaml before releasing again."
+            exit 1
+          fi
+      - name: Extract changelog entry
+        id: notes
+        env:
+          ADDON: ${{ steps.resolve.outputs.addon }}
+          VERSION: ${{ steps.resolve.outputs.version }}
+        run: |
+          changelog="${ADDON}/CHANGELOG.md"
+          notes_file="${RUNNER_TEMP}/release-notes.md"
+
+          if [[ -f "${changelog}" ]]; then
+            # Take everything between this version's heading and the next one.
+            # Tolerates `## 1.2.3`, `## [1.2.3]` and `## [1.2.3] - 2026-01-01`.
+            awk -v want="${VERSION}" '
+              /^## / {
+                if (found) { exit }
+                heading = $0
+                sub(/^##[[:space:]]*/, "", heading)
+                gsub(/[][]/, "", heading)
+                sub(/^[Vv]/, "", heading)
+                sub(/[[:space:]]*[-–—].*$/, "", heading)
+                gsub(/[[:space:]]/, "", heading)
+                if (heading == want) { found = 1 }
+                next
+              }
+              found { print }
+            ' "${changelog}" > "${notes_file}"
+          else
+            : > "${notes_file}"
+          fi
+
+          # Trim leading and trailing blank lines.
+          trimmed="${RUNNER_TEMP}/release-notes-trimmed.md"
+          sed -e :a -e '/./,$!d' -e '/^\n*$/{$d;N;};/\n$/ba' "${notes_file}" > "${trimmed}"
+          mv "${trimmed}" "${notes_file}"
+
+          if [[ -s "${notes_file}" ]]; then
+            echo "notes-file=${notes_file}" >> "$GITHUB_OUTPUT"
+            echo "generate=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::No '${VERSION}' section found in ${changelog};" \
+                 "falling back to auto-generated release notes."
+            echo "notes-file=" >> "$GITHUB_OUTPUT"
+            echo "generate=true" >> "$GITHUB_OUTPUT"
+          fi
+
+          {
+            echo "### Release notes for ${ADDON} ${VERSION}"
+            echo
+            cat "${notes_file}"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Create the release
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.resolve.outputs.tag }}
+          TITLE: ${{ steps.resolve.outputs.slug }} ${{ steps.resolve.outputs.version }}
+          NOTES_FILE: ${{ steps.notes.outputs.notes-file }}
+          GENERATE: ${{ steps.notes.outputs.generate }}
+          PRERELEASE: ${{ inputs.prerelease }}
+          TARGET: ${{ github.sha }}
+        run: |
+          args=(release create "${TAG}" --target "${TARGET}" --title "${TITLE}")
+          if [[ "${GENERATE}" == "true" ]]; then
+            args+=(--generate-notes)
+          else
+            args+=(--notes-file "${NOTES_FILE}")
+          fi
+          if [[ "${PRERELEASE}" == "true" ]]; then
+            args+=(--prerelease)
+          fi
+          gh "${args[@]}"
+      - name: Report a dry run
+        if: ${{ inputs.dry_run }}
+        env:
+          TAG: ${{ steps.resolve.outputs.tag }}
+          TARGET: ${{ github.sha }}
+        run: |
+          echo "::notice::Dry run: would tag ${TARGET} as ${TAG} and publish it"
+
+  deploy:
+    name: Publish images
+    needs: release
+    if: ${{ !inputs.dry_run }}
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/deploy.yaml
+    with:
+      addon: ${{ needs.release.outputs.addon }}
+      version: ${{ needs.release.outputs.version }}
+      ref: ${{ github.sha }}
