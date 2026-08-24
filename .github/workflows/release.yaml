@@ -52,6 +52,7 @@ jobs:
         env:
           INPUT_ADDON: ${{ inputs.addon }}
         run: |
+          set -euo pipefail
           dirs=()
           slugs=()
           while IFS= read -r config; do
@@ -93,6 +94,7 @@ jobs:
           TAG: ${{ steps.resolve.outputs.tag }}
           ADDON: ${{ steps.resolve.outputs.addon }}
         run: |
+          set -euo pipefail
           if git rev-parse --verify --quiet "refs/tags/${TAG}" > /dev/null; then
             echo "::error::Tag ${TAG} already exists." \
                  "Bump the version in ${ADDON}/config.yaml before releasing again."
@@ -104,6 +106,7 @@ jobs:
           ADDON: ${{ steps.resolve.outputs.addon }}
           VERSION: ${{ steps.resolve.outputs.version }}
         run: |
+          set -euo pipefail
           changelog="${ADDON}/CHANGELOG.md"
           notes_file="${RUNNER_TEMP}/release-notes.md"
 
@@ -159,6 +162,7 @@ jobs:
           PRERELEASE: ${{ inputs.prerelease }}
           TARGET: ${{ github.sha }}
         run: |
+          set -euo pipefail
           args=(release create "${TAG}" --target "${TARGET}" --title "${TITLE}")
           if [[ "${GENERATE}" == "true" ]]; then
             args+=(--generate-notes)

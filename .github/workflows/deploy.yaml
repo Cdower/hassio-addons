@@ -70,6 +70,7 @@ jobs:
           INPUT_ADDON: ${{ inputs.addon }}
           INPUT_VERSION: ${{ inputs.version }}
         run: |
+          set -euo pipefail
           # Index every add-on in the repo by directory and by slug.
           dirs=()
           slugs=()
