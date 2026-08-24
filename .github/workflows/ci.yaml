@@ -229,3 +229,55 @@ jobs:
             BUILD_REF=${{ github.sha }}
             BUILD_REPOSITORY=${{ github.repository }}
             BUILD_VERSION=ci
+
+  # The single check branch protection requires. Everything above reaches main
+  # through this job, so the gated set is maintained here in code rather than as
+  # a list of job names typed into the repository settings -- add-ons can come
+  # and go, and the matrices can grow, without anyone touching the console.
+  ci:
+    name: CI
+    # Runs even when something upstream fails: without this the job would be
+    # skipped, and GitHub counts a skipped required check as a passing one.
+    if: always()
+    needs:
+      - discover
+      - lint-app
+      - lint-hadolint
+      - lint-json
+      - lint-prek
+      - lint-yamllint
+      - test-app
+      - build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Check that this job gates every other job
+        env:
+          WORKFLOW: .github/workflows/ci.yaml
+        run: |
+          all=$(yq --no-colors --output-format json eval '.jobs | keys' "${WORKFLOW}")
+          gated=$(yq --no-colors --output-format json eval '.jobs.ci.needs' "${WORKFLOW}")
+          ungated=$(
+            jq --raw-output --argjson gated "${gated}" \
+               '. - $gated - ["ci"] | join(", ")' <<< "${all}"
+          )
+          if [[ -n "${ungated}" ]]; then
+            echo "::error file=${WORKFLOW}::${ungated} is not listed in the CI" \
+                 "job's needs, so branch protection would not enforce it."
+            exit 1
+          fi
+          echo "CI gates every other job in ${WORKFLOW}"
+      - name: Check that every job succeeded
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Upstream results: ${RESULTS}"
+          for result in ${RESULTS}; do
+            if [[ "${result}" != "success" ]]; then
+              echo "::error::CI is not green: a job reported '${result}'"
+              exit 1
+            fi
+          done
