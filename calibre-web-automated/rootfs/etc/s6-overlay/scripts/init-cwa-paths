@@ -118,7 +118,18 @@ if bashio::var.has_value "${PLUGINS_PATH}"; then
     # oneshot -- which runs after cwa-init, and therefore after this script has
     # bind-mounted plugins_path into place -- registers every .zip found here
     # via `calibre-customize -a` and writes the registry itself.
-    bashio::log.info "Calibre plugins enabled from ${PLUGINS_PATH}"
+    #
+    # plugins_path ships with a value, so report what is actually there rather
+    # than announcing "plugins enabled" on every boot of an empty folder.
+    shopt -s nullglob
+    plugin_zips=(/config/.config/calibre/plugins/*.zip)
+    shopt -u nullglob
+    if [ ${#plugin_zips[@]} -gt 0 ]; then
+        bashio::log.info \
+            "Calibre plugins: registering ${#plugin_zips[@]} .zip file(s) from ${PLUGINS_PATH}"
+    else
+        bashio::log.info "Calibre plugins: none found in ${PLUGINS_PATH}"
+    fi
 fi
 
 # Surface options as env vars for downstream s6-rc longruns. The /run/s6/container_environment

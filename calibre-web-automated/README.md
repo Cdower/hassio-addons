@@ -7,8 +7,8 @@ Self-hosted ebook library with automatic ingest, format conversion, and metadata
 ## Quick start
 
 1. **Install** this add-on from the Add-on Store.
-2. **Start** it. Defaults create `/share/calibre/library` and `/share/calibre/ingest`.
-3. **Drop EPUB/PDF/MOBI files** into `/share/calibre/ingest` (use the Samba or File Editor add-on). They'll be ingested, converted, and added to the library within a few seconds.
+2. **Start** it. Defaults create `/share/calibre/calibre-library` and `/share/calibre/cwa-book-ingest`.
+3. **Drop EPUB/PDF/MOBI files** into `/share/calibre/cwa-book-ingest` (use the Samba or File Editor add-on). They'll be ingested, converted, and added to the library within a few seconds.
 4. **Open the Web UI** via the sidebar (Ingress) or directly at port `8083`.
 
 ## Configuration

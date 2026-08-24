@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Calibre plugin loading is now on by default (`CWA_CALIBRE_USER_PLUGINS=1`), which is what makes the `plugins_path` option work. Drop a plugin `.zip` (DeDRM and friends) into `plugins_path` and the add-on registers it with `calibre-customize -a` during startup — nothing loads unless you put it there.
 - Optional embedded Tailscale: when `tailscale_authkey` is set, the add-on joins the tailnet as its own node (separate identity from the HA host) and `tailscale serve` exposes the CWA UI at `https://<tailscale_hostname>.<tailnet>.ts.net`. Runs `tailscaled` in userspace networking mode so no `/dev/net/tun`, `NET_ADMIN`, or `NET_RAW` is required, and the existing 8083/tcp Web UI mapping is unchanged. State persists under `/data/tailscaled/` so node identity survives add-on upgrades and HA backups. New options: `tailscale_authkey`, `tailscale_hostname`, `tailscale_serve`, `tailscale_funnel`, `tailscale_extra_args`. Funnel additionally requires admin-console opt-in.
-- `config_path` option to host CWA's `/config` (app database, user accounts, settings) on a network share. Empty (default) keeps `/config` on HA's local `/data` as before; pair a `/share/...` value with `network_share_mode: true` so SQLite WAL is disabled on `app.db`.
+- `config_path` option to host CWA's `/config` (app database, user accounts, settings) on a network share. Clearing it keeps `/config` on HA's local `/data` as before; pair a `/share/...` value with `network_share_mode: true` so SQLite WAL is disabled on `app.db`.
 
 ### Changed
 

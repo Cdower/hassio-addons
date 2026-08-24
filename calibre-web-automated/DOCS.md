@@ -10,10 +10,10 @@
 
 | Option                | Default                  | Description                                                                                                              |
 | --------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
-| `library_path`        | `/share/calibre/library` | Where the Calibre library (`metadata.db` + book folders) lives.                                                          |
-| `ingest_path`         | `/share/calibre/ingest`  | Drop EPUB/PDF/MOBI/etc. here for automatic ingest. Files are deleted after processing.                                   |
-| `config_path`         | _(empty)_                | Where CWA's `/config` (app database, user accounts, settings) lives. Empty = `/data` (HA-managed, local). Set to a `/share/...` path to host `/config` on a network share. |
-| `plugins_path`        | _(empty)_                | Optional Calibre plugins folder. Drop plugin `.zip` files here and they are registered on start. See "Plugins" below.                                                                    |
+| `library_path`        | `/share/calibre/calibre-library` | Where the Calibre library (`metadata.db` + book folders) lives.                                                          |
+| `ingest_path`         | `/share/calibre/cwa-book-ingest`  | Drop EPUB/PDF/MOBI/etc. here for automatic ingest. Files are deleted after processing.                                   |
+| `config_path`         | `/share/calibre/config`  | Where CWA's `/config` (app database, user accounts, settings) lives. Clear it to fall back to `/data` (HA-managed, local); set a `/share/...` path to host `/config` on a network share. |
+| `plugins_path`        | `/share/calibre/plugins` | Calibre plugins folder. Drop plugin `.zip` files here and they are registered on start; an empty folder loads nothing. Clear the option to disable the bind mount. See "Plugins" below. |
 | `network_share_mode`  | `false`                  | Set `true` when the library or `config_path` lives on NFS/SMB. Disables SQLite WAL on `metadata.db`/`app.db` and switches the ingest watcher to polling. |
 | `hardcover_token`     | _(empty)_                | API token for [Hardcover](https://hardcover.app) metadata enrichment.                                                    |
 | `trusted_proxy_count` | `1`                      | Number of reverse proxies in front of CWA whose `X-Forwarded-*` headers should be trusted. Use `1` only when the add-on is behind exactly one reverse proxy (Cloudflare, nginx-proxy-manager, Traefik, etc.). Set higher for chained proxies. For direct access with no reverse proxy, use a lower value such as `0` if supported, rather than trusting forwarded headers from clients. |
@@ -28,7 +28,7 @@
 
 ### Local-volume setup (recommended for new users)
 
-Leave the defaults. The add-on creates `/share/calibre/library` and `/share/calibre/ingest` on first start. Mount your `share/` over Samba or use the File Editor add-on to drop books in.
+Leave the defaults. The add-on creates `/share/calibre/calibre-library`, `/share/calibre/cwa-book-ingest`, `/share/calibre/config` and `/share/calibre/plugins` on first start. Mount your `share/` over Samba or use the File Editor add-on to drop books in.
 
 ### Network-share setup (NAS users / migrating from existing CWA)
 
@@ -43,16 +43,16 @@ Leave the defaults. The add-on creates `/share/calibre/library` and `/share/cali
    - Stop your old container.
    - Copy `metadata.db` and the book folders to the new `library_path`.
    - To preserve user accounts and CWA's app database, you have two options:
-     - **Add-on-local `/data`-backed `/config`** (default): the add-on keeps `/config` on its private `/data` directory, which isn't reachable from Samba. Either set `config_path` to a `/share/...` path so you can copy files in directly, or use the SSH/Terminal add-on and copy your old CWA `/config` contents into `/data` (path inside this add-on's container).
-     - **Network-share `/config`**: copy your old CWA `/config` contents into the directory you set as `config_path` (e.g. `/share/nas/calibre/config`).
-   - Delete the sentinel from wherever `/config` lives: `rm <config_path>/.cwa-initialized` (or `rm /data/.cwa-initialized` for the default) so the add-on doesn't think it's already initialized.
+     - **Add-on-local `/data`-backed `/config`**: with `config_path` cleared the add-on keeps `/config` on its private `/data` directory, which isn't reachable from Samba. Either leave `config_path` on a `/share/...` path so you can copy files in directly, or use the SSH/Terminal add-on and copy your old CWA `/config` contents into `/data` (path inside this add-on's container).
+     - **Network-share `/config`** (what the shipped `config_path` gives you): copy your old CWA `/config` contents into the directory `config_path` names (`/share/calibre/config` out of the box, or e.g. `/share/nas/calibre/config`).
+   - Delete the sentinel from wherever `/config` lives: `rm <config_path>/.cwa-initialized`, or `rm /data/.cwa-initialized` if you cleared `config_path`, so the add-on doesn't think it's already initialized.
    - Restart the add-on.
 
 > Switching `config_path` after the add-on has run reseeds the new target from whatever `/config` points to at startup. On a brand-new install that's the image defaults; on an existing install it's typically your previous persistent `/config`. If the config you want to keep is *not* what `/config` points to when the add-on starts, copy it into the new target manually *before* restarting.
 
 ## Plugins
 
-Set `plugins_path` to a folder, drop your Calibre plugin `.zip` files in it (DeDRM, DeACSM, and so on) and restart the add-on. On start-up the add-on registers every `.zip` it finds with `calibre-customize -a`, and the ingest, conversion and metadata subprocesses run with that plugin directory as Calibre's configuration directory. Nothing loads unless you put it there — an empty or unset `plugins_path` means no third-party plugin code runs.
+Set `plugins_path` to a folder, drop your Calibre plugin `.zip` files in it (DeDRM, DeACSM, and so on) and restart the add-on. On start-up the add-on registers every `.zip` it finds with `calibre-customize -a`, and the ingest, conversion and metadata subprocesses run with that plugin directory as Calibre's configuration directory. The folder ships configured but empty, and an empty folder loads nothing — no third-party plugin code runs until you put a `.zip` in it.
 
 Two details worth knowing:
 
@@ -125,7 +125,7 @@ If you just want remote access to your *whole* HA instance, the [official commun
 
 ## Persistence
 
-By default the add-on stores CWA's app database, user accounts, and settings in HA's per-add-on `/data` directory, which survives add-on upgrades and uninstalls. Set `config_path` to relocate that state to a `/share/...` path (typically a NAS mount) — useful if you want the CWA config on the same share as the library, or shared with another CWA instance. Library files in `library_path` (e.g. under `/share`) are always independent of the add-on lifecycle.
+CWA's app database, user accounts, and settings live wherever `config_path` points — `/share/calibre/config` as shipped, which keeps them on the same share as the library and reachable over Samba. Clear `config_path` to store them in HA's per-add-on `/data` directory instead, which survives add-on upgrades and uninstalls but isn't reachable from Samba. Library files in `library_path` (e.g. under `/share`) are always independent of the add-on lifecycle.
 
 This add-on uses `privileged: [SYS_ADMIN]` and `apparmor: false` to bind-mount your chosen `/config` path over the base image's `VOLUME /config`. Home Assistant marks add-ons with elevated capabilities — that's expected here.
 
