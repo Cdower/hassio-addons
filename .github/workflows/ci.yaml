@@ -26,29 +26,50 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  information:
-    name: Gather addon information
+  discover:
+    name: Discover add-ons
     runs-on: ubuntu-latest
     outputs:
-      architectures: ${{ steps.info.outputs.architectures }}
-      build: ${{ steps.info.outputs.build }}
-      description: ${{ steps.info.outputs.description }}
-      name: ${{ steps.info.outputs.name }}
-      slug: ${{ steps.info.outputs.slug }}
-      target: ${{ steps.info.outputs.target }}
+      addons: ${{ steps.discover.outputs.addons }}
+      builds: ${{ steps.discover.outputs.builds }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
           persist-credentials: false
-      - name: Read addon information
-        id: info
-        uses: frenck/action-addon-information@ce1377e9851cf569c29329e65fb2c57e67ca0f69  # v1.4.2
+      - name: List add-ons and their architectures
+        id: discover
+        run: |
+          addons=$(
+            find . -mindepth 2 -maxdepth 2 -name config.yaml -printf '%h\n' \
+              | sed 's|^\./||' \
+              | sort \
+              | jq --raw-input --slurp --compact-output \
+                  'split("\n") | map(select(length > 0))'
+          )
+          if [[ "${addons}" == "[]" ]]; then
+            echo "::error::No add-on configuration files found"
+            exit 1
+          fi
+          echo "addons=${addons}" >> "$GITHUB_OUTPUT"
+
+          builds=$(
+            for addon in $(jq --raw-output '.[]' <<< "${addons}"); do
+              yq --no-colors --output-format json eval '.arch' "${addon}/config.yaml" \
+                | jq --compact-output --arg addon "${addon}" \
+                    '.[] | {addon: $addon, architecture: .}'
+            done | jq --slurp --compact-output '.'
+          )
+          echo "builds=${builds}" >> "$GITHUB_OUTPUT"
 
   lint-app:
-    name: Lint App
-    needs: information
+    name: Lint App (${{ matrix.addon }})
+    needs: discover
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        addon: ${{ fromJson(needs.discover.outputs.addons) }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
@@ -58,12 +79,16 @@ jobs:
         uses: frenck/action-addon-linter@f995494fd84fae6310d23617e66d0e37de4f14eb  # v2.21.0
         with:
           community: false
-          path: "./${{ needs.information.outputs.target }}"
+          path: "./${{ matrix.addon }}"
 
   lint-hadolint:
-    name: Hadolint
-    needs: information
+    name: Hadolint (${{ matrix.addon }})
+    needs: discover
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        addon: ${{ fromJson(needs.discover.outputs.addons) }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
@@ -72,7 +97,7 @@ jobs:
       - name: Run Hadolint
         uses: brpaz/hadolint-action@c27bd9edc1e95eed30474db8f295ff5807ebca14  # v1.5.0
         with:
-          dockerfile: "./${{ needs.information.outputs.target }}/Dockerfile"
+          dockerfile: "./${{ matrix.addon }}/Dockerfile"
 
   lint-json:
     name: JSON Lint
@@ -126,19 +151,29 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
         with:
-          # Match the Python shipped by the CWA base image (Dockerfile).
+          # Match the Python shipped by the add-on base images (see Dockerfiles).
           python-version: "3.13"
       - name: Install test dependencies
-        # PyJWT/cryptography/werkzeug mirror what the Cloudflare Access
-        # verifier and user-setup scripts see in the image's /lsiopy venv.
-        run: pip install pytest PyJWT cryptography werkzeug
-      - name: Run provider tests
-        run: pytest calibre-web-automated/tests/ -v
+        run: |
+          shopt -s nullglob
+          pip install pytest
+          for requirements in */requirements.txt; do
+            pip install -r "${requirements}"
+          done
+      - name: Run add-on tests
+        run: |
+          shopt -s nullglob
+          suites=(*/tests)
+          if [[ ${#suites[@]} -eq 0 ]]; then
+            echo "::error::No add-on test suites found"
+            exit 1
+          fi
+          pytest "${suites[@]}" -v
 
   build:
-    name: Build (${{ matrix.architecture }})
+    name: Build ${{ matrix.addon }} (${{ matrix.architecture }})
     needs:
-      - information
+      - discover
       - lint-app
       - lint-hadolint
       - lint-json
@@ -149,19 +184,24 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        architecture: ${{ fromJson(needs.information.outputs.architectures) }}
+        include: ${{ fromJson(needs.discover.outputs.builds) }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
           persist-credentials: false
+      - name: Read addon information
+        id: info
+        uses: frenck/action-addon-information@ce1377e9851cf569c29329e65fb2c57e67ca0f69  # v1.4.2
+        with:
+          path: "./${{ matrix.addon }}"
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
       - name: Compose build flags
         id: flags
         env:
           ARCHITECTURE: ${{ matrix.architecture }}
-          BUILD_FILE: ${{ needs.information.outputs.build }}
+          BUILD_FILE: ${{ steps.info.outputs.build }}
         run: |
           echo "date=$(date +"%Y-%m-%dT%H:%M:%SZ")" >> "$GITHUB_OUTPUT"
           from=$(yq --no-colors eval ".build_from.${ARCHITECTURE}" "${BUILD_FILE}")
@@ -175,17 +215,69 @@ jobs:
         uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f  # v7.1.0
         with:
           push: false
-          context: ${{ needs.information.outputs.target }}
-          file: ${{ needs.information.outputs.target }}/Dockerfile
+          context: ${{ steps.info.outputs.target }}
+          file: ${{ steps.info.outputs.target }}/Dockerfile
           platforms: ${{ steps.flags.outputs.platform }}
-          cache-from: type=gha,scope=${{ matrix.architecture }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.architecture }}
+          cache-from: type=gha,scope=${{ matrix.addon }}-${{ matrix.architecture }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.addon }}-${{ matrix.architecture }}
           build-args: |
             BUILD_ARCH=${{ matrix.architecture }}
             BUILD_DATE=${{ steps.flags.outputs.date }}
-            BUILD_DESCRIPTION=${{ needs.information.outputs.description }}
+            BUILD_DESCRIPTION=${{ steps.info.outputs.description }}
             BUILD_FROM=${{ steps.flags.outputs.from }}
-            BUILD_NAME=${{ needs.information.outputs.name }}
+            BUILD_NAME=${{ steps.info.outputs.name }}
             BUILD_REF=${{ github.sha }}
             BUILD_REPOSITORY=${{ github.repository }}
             BUILD_VERSION=ci
+
+  # The single check branch protection requires. Everything above reaches main
+  # through this job, so the gated set is maintained here in code rather than as
+  # a list of job names typed into the repository settings -- add-ons can come
+  # and go, and the matrices can grow, without anyone touching the console.
+  ci:
+    name: CI
+    # Runs even when something upstream fails: without this the job would be
+    # skipped, and GitHub counts a skipped required check as a passing one.
+    if: always()
+    needs:
+      - discover
+      - lint-app
+      - lint-hadolint
+      - lint-json
+      - lint-prek
+      - lint-yamllint
+      - test-app
+      - build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Check that this job gates every other job
+        env:
+          WORKFLOW: .github/workflows/ci.yaml
+        run: |
+          all=$(yq --no-colors --output-format json eval '.jobs | keys' "${WORKFLOW}")
+          gated=$(yq --no-colors --output-format json eval '.jobs.ci.needs' "${WORKFLOW}")
+          ungated=$(
+            jq --raw-output --argjson gated "${gated}" \
+               '. - $gated - ["ci"] | join(", ")' <<< "${all}"
+          )
+          if [[ -n "${ungated}" ]]; then
+            echo "::error file=${WORKFLOW}::${ungated} is not listed in the CI" \
+                 "job's needs, so branch protection would not enforce it."
+            exit 1
+          fi
+          echo "CI gates every other job in ${WORKFLOW}"
+      - name: Check that every job succeeded
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Upstream results: ${RESULTS}"
+          for result in ${RESULTS}; do
+            if [[ "${result}" != "success" ]]; then
+              echo "::error::CI is not green: a job reported '${result}'"
+              exit 1
+            fi
+          done

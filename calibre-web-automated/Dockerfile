@@ -1,4 +1,4 @@
-ARG BUILD_FROM="crocodilestick/calibre-web-automated:v4.0.6"
+ARG BUILD_FROM="ghcr.io/new-usemame/calibre-web-nextgen:v4.1.40"
 # hadolint ignore=DL3006
 FROM ${BUILD_FROM}
 
@@ -18,8 +18,32 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ENV PUID=1000 \
     PGID=1000
 
+# Opt in to user-installed Calibre plugins, which is what makes the add-on's
+# `plugins_path` option actually work.
+#
+# CWA v4.0.6 exported `CALIBRE_CONFIG_DIR=/config/.config/calibre`. Calibre
+# reads `CALIBRE_CONFIG_DIRECTORY`; it has never recognised that name, so the
+# variable was inert and plugin loading only ever worked by accident of HOME.
+# That is why the add-on used to warn about hand-writing `customize.py.json`.
+# The NextGen base drops the misspelled name and gates the correctly-spelled
+# one behind `CWA_CALIBRE_USER_PLUGINS`, which
+# `cps/services/calibre_user_plugins.py` applies per Calibre subprocess
+# (ingest, convert, cover-enforcer, embed-metadata). Setting the opt-in here
+# turns that on image-wide and lets the boot-time `auto_library` pass register
+# every .zip under `plugins_path` with `calibre-customize -a`.
+#
+# `CALIBRE_CONFIG_DIRECTORY` is then also set globally, for the Calibre
+# invocations that do not route through that helper (`calibre-customize`
+# itself, anything an operator runs from the add-on shell) so they all resolve
+# the same directory the add-on bind-mounts `plugins_path` over. The base
+# image deliberately omits it because a global value would force plugin
+# loading on for every subprocess — here that is the intent, not a side
+# effect. Nothing loads unless the operator puts a plugin in `plugins_path`.
+ENV CWA_CALIBRE_USER_PLUGINS=1 \
+    CALIBRE_CONFIG_DIRECTORY=/config/.config/calibre
+
 # Install bashio so init scripts can use bashio::config / bashio::log.
-# Upstream image is Ubuntu Noble (LSIO base) — jq is already present but pin it.
+# Base image is Ubuntu Noble (LSIO base) — jq is already present but pin it.
 ARG BASHIO_VERSION="0.16.2"
 # hadolint ignore=DL3008
 RUN \
@@ -37,7 +61,7 @@ RUN \
 # nginx + PyJWT power the optional Cloudflare Access mode: nginx fronts CWA
 # (LAN header-stripping listener on 8083, JWT-gated listener on 8085) and the
 # verifier validates Cf-Access-Jwt-Assertion with PyJWT. PyJWT rides the
-# /lsiopy venv, whose `cryptography` (upstream requirements.txt) provides the
+# /lsiopy venv, whose `cryptography` (upstream pyproject.toml) provides the
 # RS256 backend. Ubuntu's nginx-core includes http_auth_request_module.
 ARG PYJWT_VERSION="2.10.1"
 # hadolint ignore=DL3008

@@ -4,10 +4,10 @@
 # Offline tests for the Cloudflare Access app.db reconciler
 # (rootfs/opt/cwa-access/setup_access.py).
 #
-# The fixture database mirrors the `user` and `settings` schema seeded by the
-# crocodilestick/calibre-web-automated:v4.0.6 base image (empty_library/app.db,
-# i.e. BEFORE the app's own migrations add columns like `theme`), plus a
-# migrated variant. No network, no cps import.
+# The fixture database mirrors the core `user` and `settings` schema of the
+# calibre-web-nextgen base image's app.db BEFORE the app's own migrations add
+# columns like `theme` (setup_access must handle both, since it introspects
+# columns), plus a migrated variant. No network, no cps import.
 #
 # Run directly:   python3 calibre-web-automated/tests/test_access_users.py
 # Or via pytest:  pytest calibre-web-automated/tests/test_access_users.py
@@ -28,8 +28,8 @@ spec = importlib.util.spec_from_file_location("cwa_setup_access", SETUP_PATH)
 setup_access = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(setup_access)
 
-# `user` columns exactly as seeded by v4.0.6's empty_library/app.db
-# (pre-migration: no theme/hardcover_token/kindle_mail_subject/...).
+# Core `user` columns (pre-migration: no theme/hardcover_token/
+# kindle_mail_subject/opds_only_shelves_sync/...).
 SEEDED_USER_SQL = """
 CREATE TABLE user (
     id INTEGER NOT NULL PRIMARY KEY,
@@ -75,6 +75,7 @@ def _make_db(path, migrated=False):
             "    kobo_only_shelves_sync INTEGER\n",
             "    kobo_only_shelves_sync INTEGER,\n"
             "    hardcover_token VARCHAR,\n"
+            "    opds_only_shelves_sync INTEGER DEFAULT 0,\n"
             "    theme INTEGER DEFAULT 0,\n"
             "    kindle_mail_subject VARCHAR(256),\n"
             "    auto_send_enabled BOOLEAN DEFAULT 0,\n"
@@ -156,7 +157,15 @@ class SetupAccessTest(unittest.TestCase):
         rc = _run(
             "enable",
             self.db,
-            ["not-an-email", "two@at@signs", "with space@x.com", "", "ok@example.com"],
+            [
+                "not-an-email",
+                "two@at@signs",
+                "with space@x.com",
+                "a@b:8080",
+                "unicode@exämple.com",
+                "",
+                "ok@example.com",
+            ],
         )
         self.assertEqual(rc, 0)
         rows = self._query("SELECT name FROM user WHERE name != 'admin'")
@@ -166,10 +175,11 @@ class SetupAccessTest(unittest.TestCase):
         _make_db(self.db, migrated=True)
         self.assertEqual(_run("enable", self.db, ["alice@gmail.com"]), 0)
         rows = self._query(
-            "SELECT theme, kobo_only_shelves_sync, auto_send_enabled, "
-            "allow_additional_ereader_emails FROM user WHERE name = 'alice@gmail.com'"
+            "SELECT theme, kobo_only_shelves_sync, opds_only_shelves_sync, "
+            "auto_send_enabled, allow_additional_ereader_emails "
+            "FROM user WHERE name = 'alice@gmail.com'"
         )
-        self.assertEqual(rows, [(1, 0, 0, 1)])
+        self.assertEqual(rows, [(1, 0, 0, 0, 1)])
 
     def test_user_schema_mismatch_skips_creation_but_enables_login(self):
         _make_db(self.db)

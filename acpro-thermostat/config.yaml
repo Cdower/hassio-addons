@@ -1,0 +1,50 @@
+---
+name: AC Pro Thermostat
+version: "1.0.0"
+# version: "dev"
+slug: acpro-thermostat
+description: Local control of the AC Pro X/XB-Series smart communicating touchscreen thermostat
+url: https://github.com/Cdower/hassio-addons/tree/main/acpro-thermostat
+arch:
+  - amd64
+  - aarch64
+init: false
+# The control is found by UDP broadcast and replies to the source port, so the
+# add-on has to sit on the LAN rather than behind the add-on bridge network.
+host_network: true
+# Needed to read the MQTT broker credentials the Supervisor hands out.
+hassio_api: true
+services:
+  - mqtt:want
+image: ghcr.io/cdower/{arch}-hassio-addon-acpro-thermostat
+options:
+  device_host: ""
+  device_port: 7000
+  device_name: ""
+  broadcast_address: 255.255.255.255
+  scan_interval: 30
+  request_timeout: 2
+  encryption_version: 0
+  extra_properties: []
+  ignored_properties: []
+  log_level: info
+schema:
+  device_host: str?
+  device_port: port?
+  device_name: str?
+  broadcast_address: str
+  scan_interval: int(5,3600)
+  request_timeout: float(0.5,15)?
+  encryption_version: int(0,2)
+  extra_properties:
+    - str
+  ignored_properties:
+    - str
+  mqtt_host: str?
+  mqtt_port: port?
+  mqtt_username: str?
+  mqtt_password: password?
+  mqtt_ssl: bool?
+  mqtt_discovery_prefix: str?
+  mqtt_topic_prefix: str?
+  log_level: list(trace|debug|info|notice|warning|error|fatal)?

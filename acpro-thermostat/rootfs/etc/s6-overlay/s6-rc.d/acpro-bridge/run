@@ -1,0 +1,18 @@
+#!/command/with-contenv bashio
+# ==============================================================================
+# Runs the bridge between the AC Pro control and Home Assistant's MQTT broker.
+# ==============================================================================
+bashio::log.info "Starting the AC Pro thermostat bridge..."
+
+if bashio::config.has_value 'device_host'; then
+    bashio::log.info "Control address pinned to $(bashio::config 'device_host')"
+else
+    bashio::log.info "No device_host set; discovering the control by broadcast"
+fi
+
+if ! bashio::services.available 'mqtt' && ! bashio::config.has_value 'mqtt_host'; then
+    bashio::log.warning "No MQTT service is available and no mqtt_host is configured."
+    bashio::log.warning "Install the Mosquitto broker add-on, or set mqtt_host in the options."
+fi
+
+exec python3 -u -m acpro_thermostat

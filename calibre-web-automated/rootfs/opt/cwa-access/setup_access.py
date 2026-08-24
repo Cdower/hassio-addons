@@ -22,10 +22,13 @@ import sys
 
 DEFAULT_DB = "/config/app.db"
 HEADER_NAME = "X-Remote-User"
-EMAIL_RE = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,255}$")
+# Same pattern as verifier.py's EMAIL_RE: printable ASCII minus ':' and '@',
+# exactly one '@'. Anything looser would create accounts the verifier can
+# never log in (it rejects such emails as header-unsafe).
+EMAIL_RE = re.compile(r"^[!-9;-?A-~]{1,64}@[!-9;-?A-~]{1,255}$")
 
-# Columns the INSERT relies on; all exist in every app.db since well before
-# the pinned base image (v4.0.6 seeds them in empty_library/app.db).
+# Columns the INSERT relies on; all present since long before the pinned base
+# image (cwa-init creates app.db via the app itself, fully migrated).
 REQUIRED_USER_COLS = {
     "name", "email", "password", "role", "locale", "sidebar_view",
     "default_language", "denied_tags", "allowed_tags",
@@ -105,6 +108,7 @@ def create_users(con, emails):
             ("kindle_mail_subject", ""),
             ("view_settings", "{}"),
             ("kobo_only_shelves_sync", 0),
+            ("opds_only_shelves_sync", 0),
             ("theme", 1),
             ("hardcover_token", ""),
             ("auto_send_enabled", 0),
@@ -175,10 +179,16 @@ def main(argv):
     mode = argv[1]
     db = DEFAULT_DB
     if "--db" in argv:
-        db = argv[argv.index("--db") + 1]
+        db_index = argv.index("--db") + 1
+        if db_index >= len(argv):
+            log("usage: setup_access.py enable|disable|warn-if-enabled [--db PATH]")
+            return 2
+        db = argv[db_index]
 
     try:
-        con = sqlite3.connect(db, timeout=30)
+        # mode=rw: never create the file — a phantom 0-byte app.db would mask
+        # the base image's own first-boot initialization.
+        con = sqlite3.connect(f"file:{db}?mode=rw", uri=True, timeout=30)
     except sqlite3.Error as exc:
         log(f"cannot open {db}: {exc}")
         return 1

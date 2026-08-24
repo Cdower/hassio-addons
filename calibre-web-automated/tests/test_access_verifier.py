@@ -142,6 +142,7 @@ class VerifierTest(unittest.TestCase):
             "a b@c.com",
             "a@b:8080",
             "no-at-sign",
+            "two@at@signs",
             "unicode@exämple.com",
         ):
             status, user = self._request(_token(email=evil))

@@ -26,9 +26,10 @@ CERTS_URL = f"{ISSUER}/cdn-cgi/access/certs"
 LISTEN = ("127.0.0.1", 8086)
 
 # The email becomes an HTTP response header and then CWA's login username.
-# Printable ASCII only, no whitespace/CR/LF (header injection) and no ':'
-# (header syntax); RFC-ish length caps.
-EMAIL_RE = re.compile(r"^[!-9;-~]{1,64}@[!-9;-~]{1,255}$")
+# Printable ASCII only, no whitespace/CR/LF (header injection), no ':'
+# (header syntax), and exactly one '@' (both character classes exclude it);
+# RFC-ish length caps. Keep in sync with setup_access.py.
+EMAIL_RE = re.compile(r"^[!-9;-?A-~]{1,64}@[!-9;-?A-~]{1,255}$")
 
 _jwks_lock = threading.Lock()
 _jwks_client = None

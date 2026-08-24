@@ -1,0 +1,211 @@
+---
+name: Bump
+
+# Prepares a release for one add-on: sets the new version in its config.yaml,
+# promotes its changelog's Unreleased section, and opens a PR. Merge that PR,
+# then run the Release workflow. See RELEASING.md.
+
+# yamllint disable-line rule:truthy
+on:
+  workflow_dispatch:
+    inputs:
+      addon:
+        description: Add-on slug to bump (e.g. calibre-web-automated)
+        required: true
+        type: string
+      version:
+        description: New version, e.g. 4.0.6.11 (no leading "v")
+        required: true
+        type: string
+      dry_run:
+        description: Show the diff without pushing a branch or opening a PR
+        required: false
+        default: false
+        type: boolean
+
+permissions: {}
+
+concurrency:
+  group: bump-${{ inputs.addon }}
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    name: Bump ${{ inputs.addon }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          # Credentials are kept because this job pushes the bump branch.
+          # A push made with GITHUB_TOKEN triggers no workflows, and merging
+          # needs the required CI check, so prefer a BUMP_TOKEN PAT when one
+          # is configured. Without it the PR step dispatches CI by hand.
+          # zizmor: ignore[artipacked] - the pushed branch is the deliverable
+          token: ${{ secrets.BUMP_TOKEN || secrets.GITHUB_TOKEN }}
+      - name: Resolve add-on
+        id: resolve
+        env:
+          INPUT_ADDON: ${{ inputs.addon }}
+        run: |
+          set -euo pipefail
+          dirs=()
+          slugs=()
+          while IFS= read -r config; do
+            dirs+=("${config%/config.yaml}")
+            slugs+=("$(yq --no-colors --exit-status eval '.slug' "${config}")")
+          done < <(find . -mindepth 2 -maxdepth 2 -name config.yaml -printf '%P\n' | sort)
+
+          index=-1
+          for i in "${!dirs[@]}"; do
+            if [[ "${INPUT_ADDON}" == "${dirs[i]}" || "${INPUT_ADDON}" == "${slugs[i]}" ]]; then
+              index=$i
+              break
+            fi
+          done
+          if [[ ${index} -lt 0 ]]; then
+            echo "::error::Unknown add-on '${INPUT_ADDON}'. Known slugs: ${slugs[*]}"
+            exit 1
+          fi
+
+          {
+            echo "addon=${dirs[index]}"
+            echo "slug=${slugs[index]}"
+            echo "current=$(yq --no-colors --exit-status eval '.version' "${dirs[index]}/config.yaml")"
+          } >> "$GITHUB_OUTPUT"
+      - name: Validate the new version
+        env:
+          ADDON: ${{ steps.resolve.outputs.addon }}
+          CURRENT: ${{ steps.resolve.outputs.current }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [[ ! "${VERSION}" =~ ^[0-9]+(\.[0-9]+)*([-.][0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]; then
+            echo "::error::'${VERSION}' is not a usable version number." \
+                 "Give a bare version such as 4.0.6.11, with no leading 'v'."
+            exit 1
+          fi
+          if [[ "${VERSION}" == "${CURRENT}" ]]; then
+            echo "::error::${ADDON} is already at ${VERSION}"
+            exit 1
+          fi
+          newest=$(printf '%s\n%s\n' "${CURRENT}" "${VERSION}" | sort --version-sort | tail -1)
+          if [[ "${newest}" != "${VERSION}" ]]; then
+            echo "::error::${VERSION} sorts before the current ${CURRENT}." \
+                 "Releases only move forward."
+            exit 1
+          fi
+      - name: Check the release tag and branch are free
+        id: names
+        env:
+          SLUG: ${{ steps.resolve.outputs.slug }}
+          ADDON: ${{ steps.resolve.outputs.addon }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          tag="${SLUG}-v${VERSION}"
+          branch="bump/${tag}"
+
+          if git rev-parse --verify --quiet "refs/tags/${tag}" > /dev/null; then
+            echo "::error::${SLUG} ${VERSION} is already released (tag ${tag} exists)"
+            exit 1
+          fi
+          if git rev-parse --verify --quiet "refs/remotes/origin/${branch}" > /dev/null; then
+            echo "::error::Branch ${branch} already exists." \
+                 "Finish or delete that bump before starting it again."
+            exit 1
+          fi
+
+          {
+            echo "tag=${tag}"
+            echo "branch=${branch}"
+          } >> "$GITHUB_OUTPUT"
+      - name: Apply the bump
+        id: apply
+        env:
+          ADDON: ${{ steps.resolve.outputs.addon }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          TODAY="$(date --utc +%F)" python3 .github/scripts/bump-addon.py
+          {
+            echo '### Bump diff'
+            echo '```diff'
+            git --no-pager diff
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Open the bump PR
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ secrets.BUMP_TOKEN || secrets.GITHUB_TOKEN }}
+          ADDON: ${{ steps.resolve.outputs.addon }}
+          SLUG: ${{ steps.resolve.outputs.slug }}
+          CURRENT: ${{ steps.resolve.outputs.current }}
+          VERSION: ${{ inputs.version }}
+          BRANCH: ${{ steps.names.outputs.branch }}
+          TAG: ${{ steps.names.outputs.tag }}
+          WARNING: ${{ steps.apply.outputs.warning }}
+          HAVE_PAT: ${{ secrets.BUMP_TOKEN != '' }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch --create "${BRANCH}"
+          git commit --quiet --all --message "Bump ${SLUG} to ${VERSION}"
+          git push --quiet origin "${BRANCH}"
+
+          # Branch protection requires the CI check, and a branch pushed with
+          # GITHUB_TOKEN starts no workflow run -- the PR would sit forever
+          # with no check to satisfy. Dispatch events are exempt from that
+          # rule, so start CI explicitly. It reports against this branch's head
+          # commit, which is the PR's head commit, so the gate sees it.
+          ci_dispatched=false
+          if [[ "${HAVE_PAT}" != "true" ]]; then
+            gh workflow run ci.yaml --ref "${BRANCH}"
+            ci_dispatched=true
+          fi
+
+          body="${RUNNER_TEMP}/pr-body.md"
+          {
+            echo "Bumps \`${ADDON}\` from ${CURRENT} to ${VERSION}."
+            echo
+            echo "- \`${ADDON}/config.yaml\`: \`version: \"${VERSION}\"\`"
+            echo "- \`${ADDON}/CHANGELOG.md\`: Unreleased promoted to" \
+                 "\`## [${VERSION}]\`, with a fresh Unreleased above it"
+            echo
+            if [[ -n "${WARNING}" ]]; then
+              echo "> [!WARNING]"
+              echo "> ${WARNING}. Write the release notes in this PR before merging —"
+              echo "> the Release workflow publishes that section verbatim."
+              echo
+            fi
+            echo "Merge this, then run the **Release** workflow for \`${SLUG}\`" \
+                 "to tag \`${TAG}\` and publish the images."
+            if [[ "${ci_dispatched}" == "true" ]]; then
+              echo
+              echo "CI was started by hand on this branch, because the push came" \
+                   "from \`GITHUB_TOKEN\` and so triggered nothing. It reports" \
+                   "against this same commit, so the required check still applies."
+            fi
+            echo
+            echo "---"
+            echo "_Generated by [Claude Code](https://claude.ai/code)_"
+          } > "${body}"
+
+          gh pr create \
+            --base "${GITHUB_REF_NAME}" \
+            --head "${BRANCH}" \
+            --title "Bump ${SLUG} to ${VERSION}" \
+            --body-file "${body}"
+      - name: Report a dry run
+        if: ${{ inputs.dry_run }}
+        env:
+          BRANCH: ${{ steps.names.outputs.branch }}
+        run: |
+          echo "::notice::Dry run: would push ${BRANCH} and open a PR." \
+               "The diff is in the job summary."
