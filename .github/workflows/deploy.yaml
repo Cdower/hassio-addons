@@ -26,6 +26,11 @@ concurrency:
 jobs:
   discover:
     name: Discover add-ons
+    # Forks publish nothing. Without this, a fork owner cutting a release --
+    # or dispatching this workflow -- builds and pushes images to their own
+    # GHCR namespace. Gating the first job is enough: `deploy` needs it, so a
+    # skip here skips the whole workflow.
+    if: github.repository == 'Cdower/hassio-addons'
     runs-on: ubuntu-latest
     outputs:
       builds: ${{ steps.discover.outputs.builds }}
