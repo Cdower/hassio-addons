@@ -13,7 +13,7 @@
 | `library_path`        | `/share/calibre/library` | Where the Calibre library (`metadata.db` + book folders) lives.                                                          |
 | `ingest_path`         | `/share/calibre/ingest`  | Drop EPUB/PDF/MOBI/etc. here for automatic ingest. Files are deleted after processing.                                   |
 | `config_path`         | _(empty)_                | Where CWA's `/config` (app database, user accounts, settings) lives. Empty = `/data` (HA-managed, local). Set to a `/share/...` path to host `/config` on a network share. |
-| `plugins_path`        | _(empty)_                | Optional Calibre plugins folder. See "Plugins" below.                                                                    |
+| `plugins_path`        | _(empty)_                | Optional Calibre plugins folder. Drop plugin `.zip` files here and they are registered on start. See "Plugins" below.                                                                    |
 | `network_share_mode`  | `false`                  | Set `true` when the library or `config_path` lives on NFS/SMB. Disables SQLite WAL on `metadata.db`/`app.db` and switches the ingest watcher to polling. |
 | `hardcover_token`     | _(empty)_                | API token for [Hardcover](https://hardcover.app) metadata enrichment.                                                    |
 | `trusted_proxy_count` | `1`                      | Number of reverse proxies in front of CWA whose `X-Forwarded-*` headers should be trusted. Use `1` only when the add-on is behind exactly one reverse proxy (Cloudflare, nginx-proxy-manager, Traefik, etc.). Set higher for chained proxies. For direct access with no reverse proxy, use a lower value such as `0` if supported, rather than trusting forwarded headers from clients. |
@@ -50,9 +50,14 @@ Leave the defaults. The add-on creates `/share/calibre/library` and `/share/cali
 
 > Switching `config_path` after the add-on has run reseeds the new target from whatever `/config` points to at startup. On a brand-new install that's the image defaults; on an existing install it's typically your previous persistent `/config`. If the config you want to keep is *not* what `/config` points to when the add-on starts, copy it into the new target manually *before* restarting.
 
-## Plugins (`customize.py.json` gotcha)
+## Plugins
 
-If you set `plugins_path`, you also need a `customize.py.json` file at `/config/.config/calibre/customize.py.json` (i.e. one level above `plugins/`) for Calibre to load the plugins. The add-on logs a warning if this is missing. See the [upstream README plugins section](https://github.com/crocodilestick/Calibre-Web-Automated#plugins) for the file's format.
+Set `plugins_path` to a folder, drop your Calibre plugin `.zip` files in it (DeDRM, DeACSM, and so on) and restart the add-on. On start-up the add-on registers every `.zip` it finds with `calibre-customize -a`, and the ingest, conversion and metadata subprocesses run with that plugin directory as Calibre's configuration directory. Nothing loads unless you put it there — an empty or unset `plugins_path` means no third-party plugin code runs.
+
+Two details worth knowing:
+
+- **Adding a plugin later.** Registration is skipped once Calibre's registry has entries, so a plugin dropped in after the first successful registration is not picked up by a plain restart. Register it from the add-on shell (SSH/Terminal add-on) with `calibre-customize -a /config/.config/calibre/plugins/<file>.zip`, or clear `/config/.config/calibre/customize.py.json` and restart to re-register everything.
+- **Earlier versions.** Before v4.1.40.0 this needed a hand-written `customize.py.json`, because the base image exported a misspelled `CALIBRE_CONFIG_DIR` that Calibre ignored. That is fixed; if you wrote one by hand it is still valid and can be left alone.
 
 ## Tailscale (optional)
 
@@ -122,11 +127,15 @@ If you just want remote access to your *whole* HA instance, the [official commun
 
 By default the add-on stores CWA's app database, user accounts, and settings in HA's per-add-on `/data` directory, which survives add-on upgrades and uninstalls. Set `config_path` to relocate that state to a `/share/...` path (typically a NAS mount) — useful if you want the CWA config on the same share as the library, or shared with another CWA instance. Library files in `library_path` (e.g. under `/share`) are always independent of the add-on lifecycle.
 
-This add-on uses `privileged: [SYS_ADMIN]` and `apparmor: false` to bind-mount your chosen `/config` path over the upstream image's `VOLUME /config`. Home Assistant marks add-ons with elevated capabilities — that's expected here.
+This add-on uses `privileged: [SYS_ADMIN]` and `apparmor: false` to bind-mount your chosen `/config` path over the base image's `VOLUME /config`. Home Assistant marks add-ons with elevated capabilities — that's expected here.
+
+## Base image
+
+The add-on is built on [Calibre-Web NextGen][nextgen], a fork of [Calibre-Web Automated][cwa] taken at CWA v4.0.6. It keeps CWA's data format, configuration and container layout, so switching between the two in either direction needs no migration. Versions before 4.1.40.0 of this add-on were built on `crocodilestick/calibre-web-automated:v4.0.6` directly; upgrading carries your library, users and settings over untouched.
 
 ## Upgrades
 
-When upstream releases a new version:
+When a new base image is released:
 
 1. The add-on bumps the pinned tag in `build.yaml` and `version:` in `config.yaml`.
 2. HA shows an upgrade in the Add-on Store.
@@ -137,3 +146,6 @@ If you self-build, click **Rebuild** in the add-on's three-dot menu.
 ## Support
 
 <https://github.com/Cdower/hassio-addons/issues>
+
+[cwa]: https://github.com/crocodilestick/Calibre-Web-Automated
+[nextgen]: https://github.com/new-usemame/Calibre-Web-NextGen

@@ -2,7 +2,7 @@
 
 Self-hosted ebook library with automatic ingest, format conversion, and metadata enrichment.
 
-[Calibre-Web Automated][upstream] (CWA) wraps Calibre-Web with an ingest folder, automatic format conversion, KOReader/Kobo sync, and Hardcover metadata. This add-on rebases the upstream image onto a Home Assistant Ingress wrapper.
+[Calibre-Web Automated][cwa] (CWA) wraps Calibre-Web with an ingest folder, automatic format conversion, KOReader/Kobo sync, and Hardcover metadata. This add-on rebases that image onto a Home Assistant wrapper, building on [Calibre-Web NextGen][nextgen] — a fork of CWA taken at v4.0.6, with the same data format and configuration.
 
 ## Quick start
 
@@ -21,6 +21,7 @@ Issues and feature requests: <https://github.com/Cdower/hassio-addons/issues>
 
 ## License
 
-This add-on (the wrapper) is MIT-licensed. Calibre-Web Automated itself is GPL-3.0 — see <https://github.com/crocodilestick/Calibre-Web-Automated/blob/main/LICENSE>.
+This add-on (the wrapper) is MIT-licensed. Calibre-Web Automated and Calibre-Web NextGen are both GPL-3.0 — see <https://github.com/crocodilestick/Calibre-Web-Automated/blob/main/LICENSE> and <https://github.com/new-usemame/Calibre-Web-NextGen/blob/main/LICENSE>.
 
-[upstream]: https://github.com/crocodilestick/Calibre-Web-Automated
+[cwa]: https://github.com/crocodilestick/Calibre-Web-Automated
+[nextgen]: https://github.com/new-usemame/Calibre-Web-NextGen
