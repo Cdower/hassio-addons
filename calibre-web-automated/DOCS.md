@@ -23,6 +23,9 @@
 | `tailscale_serve`     | `true`                   | When `true`, exposes CWA at `https://<tailscale_hostname>.<tailnet>.ts.net` via `tailscale serve` (auto HTTPS).            |
 | `tailscale_funnel`    | `false`                  | When `true` (and `tailscale_serve: true`), additionally enables Tailscale Funnel so the same URL is reachable from the public internet. Requires Funnel to be enabled for your tailnet in the admin console. |
 | `tailscale_extra_args`| _(empty)_                | Extra flags appended to `tailscale up`, e.g. `--advertise-tags=tag:calibre`.                                              |
+| `cloudflare_team_domain` | _(empty)_             | Your Cloudflare Zero Trust team domain (`myteam` or `myteam.cloudflareaccess.com`). Setting this together with `cloudflare_access_aud` enables Cloudflare Access mode. See "Cloudflare Access" below. |
+| `cloudflare_access_aud`  | _(empty)_             | The **AUD tag** (Application Audience) of your Cloudflare Access application, from Zero Trust → Access → Applications → your app → Overview. |
+| `access_users`           | `[]`                  | Emails allowed to sign in through Cloudflare. A CWA user (username = email, unusable random password) is created for each on startup. Also add the same emails to your Access policy. |
 
 ## Setup paths
 
@@ -117,6 +120,52 @@ tailscale serve --bg --service=svc:calibre --https=443 http://127.0.0.1:8083
 
 If you just want remote access to your *whole* HA instance, the [official community Tailscale add-on](https://github.com/hassio-addons/app-tailscale) is simpler — it puts the entire HA host on the tailnet (every published port, including this add-on's `:8083`). Use the embedded option here when you want CWA to have a *separate* tailnet identity from the HA host.
 
+## Cloudflare Access — sign in with Google/Apple, no passwords (optional)
+
+Let family and friends open your library at a public URL (e.g. `https://books.example.com`), sign in with their **Google or Apple** account via Cloudflare, and land in CWA already logged in — you never create or reset a password for them. Adding a person = adding their email in two places (Cloudflare's Access policy and this add-on's `access_users`).
+
+How it works:
+
+```
+Browser ──► Cloudflare edge (Google/Apple sign-in, free ≤50 users)
+        ──► Cloudflare Tunnel (the separate cloudflared add-on)
+        ──► this add-on, port 8085 (nginx validates the signed Access JWT)
+        ──► CWA, logged in as <email> via reverse-proxy header login
+```
+
+When enabled, CWA itself is pinned to `127.0.0.1` inside the container and nginx takes over: port `8083` (LAN) keeps working with normal password login exactly as before (with auth headers stripped so nobody on your LAN can impersonate a user), and port `8085` only accepts requests carrying a valid `Cf-Access-Jwt-Assertion` token — the token's signature, audience, issuer, and expiry are all verified in-container against your team's public keys. The plain `Cf-Access-Authenticated-User-Email` header is never trusted. When the options are unset, nothing changes at all.
+
+### Setup
+
+1. **Cloudflare Zero Trust team**: sign up at [one.dash.cloudflare.com](https://one.dash.cloudflare.com) (free plan covers 50 users). Note your team domain, e.g. `myteam.cloudflareaccess.com`. Your site's DNS must be on Cloudflare.
+2. **Tunnel** — install the [cloudflared add-on](https://github.com/brenner-tobias/addon-cloudflared) and connect it with a remotely-managed tunnel token (Zero Trust → Networks → Tunnels).
+3. **Public hostname** — in the tunnel's config, add a public hostname (e.g. `books.example.com`) with service `http://<container-hostname>:8085`. The exact URL to use is printed in **this add-on's log** at startup: `Point the cloudflared add-on at: http://39bd2704-calibre-web-automated:8085` (the hostname is Supervisor-assigned; yours will differ).
+4. **Access application** — Zero Trust → Access → Applications → Add → Self-hosted, domain `books.example.com`.
+   - **Login methods**: Google is built-in (Settings → Authentication → Login methods → Add → Google; needs a small Google Cloud Console OAuth app). For Apple users the simplest is **One-time PIN** (they get a code at their iCloud/any email — no Apple developer setup); generic OIDC with Sign in with Apple also works but is fiddly.
+   - **Policy**: Allow → Include → Emails → list the same emails as `access_users`.
+   - Copy the app's **AUD tag** from its Overview tab.
+5. **This add-on's options**:
+
+   ```yaml
+   cloudflare_team_domain: "myteam"
+   cloudflare_access_aud: "b53…64-hex…9d"
+   access_users:
+     - alice@gmail.com
+     - bob@icloud.com
+   trusted_proxy_count: 2   # Cloudflare edge + this add-on's nginx
+   ```
+
+   Restart the add-on. Each `access_users` email gets a CWA account (username = email, default role/sidebar — adjust per-user in CWA's admin page). Your existing `admin` account keeps working with its password on the LAN URL.
+
+### Notes
+
+- **Adding/removing a user**: add or remove the email in both the Access policy and `access_users`, restart the add-on. Removing from the Access policy alone blocks sign-in immediately; the CWA account is kept (delete it in CWA's admin page if you want it gone).
+- **Alternative to listing every email**: CWA also has *Reverse Proxy Auto Create Users* in its admin settings — anyone your Access policy admits gets an account automatically. This add-on deliberately leaves that off so `access_users` stays the allowlist; enable it in CWA's UI if you prefer policy-only management.
+- **Kobo sync / OPDS apps** can't complete Cloudflare's browser sign-in. Keep those on the LAN URL (`http://<host>:8083`) or Tailscale, or add a [service-token or bypass policy](https://developers.cloudflare.com/cloudflare-one/policies/access/) for those paths in Cloudflare (out of scope here).
+- **Port 8085** is intentionally unmapped in the add-on's network config. Leave it that way — the cloudflared add-on reaches it over Home Assistant's internal docker network, and not mapping it keeps the JWT-gated listener off your LAN.
+- **Tailscale** continues to work in this mode (it proxies to the LAN listener → password login).
+- Turning the feature off (clearing the options) flips CWA's reverse-proxy header login back off automatically on the next start.
+
 ## Known issues
 
 - **Kobo sync URLs**: CWA generates absolute URLs for Kobo sync based on the host it sees the request from. Make sure your Kobo can reach CWA at that host:port (open Settings → Server → Server URLs in CWA to inspect the URL it generated). If CWA is fronted by Cloudflare/nginx-proxy-manager/Traefik, bump `trusted_proxy_count` so CWA picks up the original host from `X-Forwarded-Host`.
@@ -137,7 +186,7 @@ The add-on is built on [Calibre-Web NextGen][nextgen], a fork of [Calibre-Web Au
 
 When a new base image is released:
 
-1. The add-on bumps the pinned tag in `build.yaml` and `version:` in `config.yaml`.
+1. The add-on bumps the pinned tag in `build.yaml` and `version:` in `config.yaml`. (Maintainers: follow `.claude/skills/update-base-image/SKILL.md` — the add-on overrides files inside the upstream image, notably the CWA s6 run script, which must be re-diffed on every bump.)
 2. HA shows an upgrade in the Add-on Store.
 3. Click upgrade. The container is rebuilt; `/data` is preserved.
 

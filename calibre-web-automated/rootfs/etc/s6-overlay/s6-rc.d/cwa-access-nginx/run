@@ -1,0 +1,15 @@
+#!/command/with-contenv bashio
+# ==============================================================================
+# nginx front for Cloudflare Access mode: LAN listener :8083 (strips auth
+# headers) + JWT-gated listener :8085 (cloudflared add-on target). CWA itself
+# is pinned to 127.0.0.1:8084 in this mode. Parks idle when disabled.
+# ==============================================================================
+
+if [ "${CWA_ACCESS_ENABLED}" != "true" ]; then
+    bashio::log.info "Cloudflare Access disabled — nginx idle (CWA serves :8083 directly)"
+    exec sleep infinity
+fi
+
+mkdir -p /run/nginx
+bashio::log.info "Starting nginx: LAN :8083 (password login), Access :8085 (JWT-gated)"
+exec nginx -c /etc/nginx/cwa-access-nginx.conf -g "daemon off;"

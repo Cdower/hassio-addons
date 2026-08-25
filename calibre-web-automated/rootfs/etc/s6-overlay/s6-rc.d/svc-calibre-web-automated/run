@@ -1,0 +1,33 @@
+#!/usr/bin/with-contenv bash
+# shellcheck shell=bash
+# ==============================================================================
+# ADD-ON OVERRIDE of upstream svc-calibre-web-automated/run (base image
+# calibre-web-nextgen v4.1.40). Only change: optional `-i $CWA_BIND_ADDRESS` so
+# Cloudflare Access mode can pin CWA to loopback (header-spoofing protection).
+# RE-DIFF against the upstream file on every base-image bump — see
+# .claude/skills/update-base-image.
+# ==============================================================================
+
+# Entry announcement (issue #868): every s6 unit names itself before doing
+# work, so a `docker logs --timestamps` trace can attribute boot time to a
+# service. This is a longrun, so the line also repeats on each supervisor
+# restart, which is what makes a crash-loop visible.
+echo "[svc-calibre-web-automated] Starting Calibre-Web server on port ${CWA_PORT_OVERRIDE:-8083}..."
+
+export CALIBRE_DBPATH=/config
+
+BIND_ARGS=()
+if [[ -n "${CWA_BIND_ADDRESS:-}" ]]; then
+    BIND_ARGS=(-i "${CWA_BIND_ADDRESS}")
+fi
+
+# -P keeps the current directory off sys.path. This unit no longer chdirs into
+# the app root, so it inherits cwd /config (the Dockerfile WORKDIR) -- and
+# /config is a volume the user mounts and writes. `python -m` puts cwd at
+# sys.path[0], so without -P a stray /config/cps.py or /config/cps/ is imported
+# in place of the application and the server never starts. The package itself
+# resolves from anywhere because the image installs it editable (Dockerfile
+# STEP 6), which is what makes dropping the chdir safe in the first place.
+exec \
+    s6-notifyoncheck -d -n 300 -w 1000 -c "nc -z localhost ${CWA_PORT_OVERRIDE:-8083}" \
+        cwa-as-abc python3 -P -m cps "${BIND_ARGS[@]}"

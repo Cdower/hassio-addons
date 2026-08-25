@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.1.40.1] - 2026-08-24
+
+### Added
+
+- Optional Cloudflare Access mode: set `cloudflare_team_domain` + `cloudflare_access_aud` (and list `access_users`) to let users sign in with Google/Apple via Cloudflare Zero Trust — no CWA passwords to manage. The Cloudflare Tunnel runs in the separate [cloudflared add-on](https://github.com/brenner-tobias/addon-cloudflared), pointed at this add-on's new (unmapped) port 8085. In this mode CWA is pinned to `127.0.0.1:8084` and nginx fronts it: the LAN listener on 8083 keeps password login and strips auth headers, while the 8085 listener validates the `Cf-Access-Jwt-Assertion` JWT (signature/audience/issuer/expiry against the team's JWKS — the bare `Cf-Access-Authenticated-User-Email` header is never trusted) and logs the user in through Calibre-Web's reverse-proxy header login. Each `access_users` email gets a pre-created CWA account with an unusable random password. No behavior change when the options are unset; disabling the feature turns header login back off automatically on the next start. New options: `cloudflare_team_domain`, `cloudflare_access_aud`, `access_users`.
+
 ## [4.1.40.0] - 2026-08-24
 
 ### Added

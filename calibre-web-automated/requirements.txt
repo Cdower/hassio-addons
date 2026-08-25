@@ -1,0 +1,8 @@
+# Test dependencies for calibre-web-automated/tests/ (installed by CI's
+# test-app job). Mirror what the Cloudflare Access verifier and user-setup
+# scripts see in the base image's /lsiopy venv: PyJWT is pinned to the same
+# version the Dockerfile installs; cryptography/werkzeug ship with the image.
+# Pinned so a rebuild of an old add-on version produces the same result.
+PyJWT==2.10.1
+cryptography==44.0.3
+werkzeug==3.1.3
