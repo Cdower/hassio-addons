@@ -106,6 +106,33 @@ if ! bashio::fs.file_exists "${CWA_CONFIG_TARGET}/.cwa-initialized"; then
 fi
 bind_user_path "${CWA_CONFIG_TARGET}" /config
 
+# Upstream cwa-init runs `chown -R abc:abc /config` on every boot, except
+# under NETWORK_SHARE_MODE, where it skips it entirely. That leaves state
+# written under a different uid unwritable for `abc` -- most commonly an
+# app.db from the v4.0.6-based add-on, which ran as 911 before the image
+# pinned PUID=1000 -- and CWA then dies on its first migration with
+# "attempt to write a readonly database". Re-own only what doesn't already
+# belong to APP_UID, so a correctly-owned share costs one traversal and no
+# writes. Runs before plugins_path is bind-mounted under /config, and -xdev
+# keeps it off any other filesystem. Failures warn instead of aborting:
+# shares whose ownership is fixed by mount options reject chown outright.
+if bashio::config.true 'network_share_mode'; then
+    if ! find /config -xdev \( ! -user "${APP_UID}" -o ! -group "${APP_GID}" \) \
+            -exec chown -h "${APP_UID}:${APP_GID}" {} + 2>/dev/null; then
+        bashio::log.warning \
+            "Could not re-own everything under ${CWA_CONFIG_TARGET} to ${APP_UID}:${APP_GID} (network share that disallows chown?)"
+    fi
+    # Name the real cause up front rather than leave it to a SQLAlchemy
+    # traceback. Tested as APP_UID, not by owner: a share mounted with a
+    # permissive file_mode is writable whoever it reports as the owner.
+    if [ -e /config/app.db ] \
+            && ! /command/s6-applyuidgid -u "${APP_UID}" -g "${APP_GID}" -G "" \
+                test -w /config/app.db; then
+        bashio::log.error \
+            "${CWA_CONFIG_TARGET}/app.db (owner uid $(stat -c %u /config/app.db)) is not writable by uid ${APP_UID}; CWA will fail to start. Fix its ownership on the share, e.g. mount with uid=${APP_UID},gid=${APP_GID}."
+    fi
+fi
+
 bind_user_path "${LIBRARY_PATH}" /calibre-library
 bind_user_path "${INGEST_PATH}" /cwa-book-ingest
 

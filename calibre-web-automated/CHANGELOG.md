@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Updated the bundled Tailscale client from 1.96.4 to 1.102.3.
 
+### Fixed
+
+- Crash on start with `network_share_mode: true`: `app.db is not writable` followed by `sqlite3.OperationalError: attempt to write a readonly database` during migration. Root cause: upstream's `cwa-init` skips its `chown -R abc:abc /config` whenever `NETWORK_SHARE_MODE` is on, so state written under another uid stays unwritable — typically an `app.db` created by the 4.0.6-based add-on, which ran as uid 911 before this image pinned `PUID=1000`. With `network_share_mode` on, the add-on now re-owns anything under `/config` that isn't already `1000:1000`, and if `app.db` is still not writable (a share whose ownership is fixed by its mount options) logs an error naming the cause instead of leaving it to a traceback.
+
 ## [4.1.40.1] - 2026-08-24
 
 ### Added
