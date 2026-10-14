@@ -23,12 +23,10 @@ map:
   - media:rw
 privileged:
   - SYS_ADMIN
-apparmor: false
 image: ghcr.io/cdower/{arch}-hassio-addon-calibre-web-automated
 options:
   library_path: /share/calibre/calibre-library
   ingest_path: /share/calibre/cwa-book-ingest
-  config_path: /share/calibre/config
   plugins_path: /share/calibre/plugins
   network_share_mode: false
   hardcover_token: ""
@@ -47,6 +45,12 @@ schema:
   ingest_path: str
   config_path: str?
   plugins_path: str?
+  metadata_providers_path: str?
+  smb_share: match(^//[^/]+/[^/].*$)?
+  smb_username: str?
+  smb_password: password?
+  smb_domain: str?
+  smb_version: list(3.1.1|3.0|2.1)?
   network_share_mode: bool
   hardcover_token: password?
   trusted_proxy_count: int(1,10)
