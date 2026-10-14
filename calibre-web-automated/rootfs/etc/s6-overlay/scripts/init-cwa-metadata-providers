@@ -1,0 +1,40 @@
+#!/command/with-contenv bashio
+# ==============================================================================
+# Install custom metadata providers from `metadata_providers_path` into CWA's
+# cps/metadata_provider/ directory. Runs after init-cwa-paths (so an SMB-hosted
+# folder is already mounted) and before upstream's cwa-init, which every CWA
+# service waits on, so nothing imports the providers before they are in place.
+#
+# Built-in providers are never overwritten: a custom file that shares a name
+# with one is skipped (see install_providers.py). Optional feature — failures
+# are logged but never block startup.
+# ==============================================================================
+
+INSTALLER=/opt/cwa-metadata-providers/install_providers.py
+PROVIDERS_PATH=""
+if bashio::config.has_value 'metadata_providers_path'; then
+    PROVIDERS_PATH=$(bashio::config 'metadata_providers_path')
+fi
+
+if ! bashio::var.has_value "${PROVIDERS_PATH}"; then
+    # Still run the installer: it removes anything a previous run installed.
+    /lsiopy/bin/python3 "${INSTALLER}" || true
+    exit 0
+fi
+
+if [[ "${PROVIDERS_PATH}" != /* ]]; then
+    bashio::log.warning \
+        "metadata_providers_path must be an absolute path (got: ${PROVIDERS_PATH}); custom metadata providers disabled"
+    exit 0
+fi
+
+if ! mkdir -p "${PROVIDERS_PATH}"; then
+    bashio::log.warning "Could not create ${PROVIDERS_PATH}; custom metadata providers disabled"
+    exit 0
+fi
+
+if ! /lsiopy/bin/python3 "${INSTALLER}" --source "${PROVIDERS_PATH}"; then
+    bashio::log.warning "Installing custom metadata providers failed (see above); continuing startup"
+fi
+
+exit 0

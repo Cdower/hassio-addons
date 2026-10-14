@@ -12,9 +12,15 @@
 | --------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
 | `library_path`        | `/share/calibre/calibre-library` | Where the Calibre library (`metadata.db` + book folders) lives.                                                          |
 | `ingest_path`         | `/share/calibre/cwa-book-ingest`  | Drop EPUB/PDF/MOBI/etc. here for automatic ingest. Files are deleted after processing.                                   |
-| `config_path`         | `/share/calibre/config`  | Where CWA's `/config` (app database, user accounts, settings) lives. Clear it to fall back to `/data` (HA-managed, local); set a `/share/...` path to host `/config` on a network share. |
+| `config_path`         | _(empty)_                | **Deprecated.** CWA's `/config` (app database, user accounts, settings) now always lives on the add-on's local storage. If set, it is only used once, to import an existing config from that folder. See "Persistence" below. |
 | `plugins_path`        | `/share/calibre/plugins` | Calibre plugins folder. Drop plugin `.zip` files here and they are registered on start; an empty folder loads nothing. Clear the option to disable the bind mount. See "Plugins" below. |
-| `network_share_mode`  | `false`                  | Set `true` when the library or `config_path` lives on NFS/SMB. Disables SQLite WAL on `metadata.db`/`app.db` and switches the ingest watcher to polling. |
+| `metadata_providers_path` | _(empty)_            | Folder of custom metadata provider `.py` files to add next to the built-in ones. See "Custom metadata providers" below. |
+| `network_share_mode`  | `false`                  | Set `true` when the library lives on NFS/SMB. Disables SQLite WAL on `metadata.db`/`app.db` and switches the ingest watcher to polling. Always on when `smb_share` is set. |
+| `smb_share`           | _(empty)_                | An SMB/CIFS share for the add-on to mount itself at `/mnt/smb`, e.g. `//192.168.1.10/calibre`. See "SMB share" below. |
+| `smb_username`        | _(empty)_                | Username for `smb_share`. Leave empty to connect as a guest.                                                             |
+| `smb_password`        | _(empty)_                | Password for `smb_share`.                                                                                                |
+| `smb_domain`          | _(empty)_                | Windows domain or workgroup for `smb_share`, if your NAS needs one.                                                      |
+| `smb_version`         | _(empty, negotiated)_    | Force an SMB protocol version: `3.1.1`, `3.0` or `2.1`.                                                                  |
 | `hardcover_token`     | _(empty)_                | API token for [Hardcover](https://hardcover.app) metadata enrichment.                                                    |
 | `trusted_proxy_count` | `1`                      | Number of reverse proxies in front of CWA whose `X-Forwarded-*` headers should be trusted. Use `1` only when the add-on is behind exactly one reverse proxy (Cloudflare, nginx-proxy-manager, Traefik, etc.). Set higher for chained proxies. For direct access with no reverse proxy, use a lower value such as `0` if supported, rather than trusting forwarded headers from clients. |
 | `log_level`           | `info`                   | One of `trace`, `debug`, `info`, `notice`, `warning`, `error`, `fatal`.                                                  |
@@ -31,27 +37,46 @@
 
 ### Local-volume setup (recommended for new users)
 
-Leave the defaults. The add-on creates `/share/calibre/calibre-library`, `/share/calibre/cwa-book-ingest`, `/share/calibre/config` and `/share/calibre/plugins` on first start. Mount your `share/` over Samba or use the File Editor add-on to drop books in.
+Leave the defaults. The add-on creates `/share/calibre/calibre-library`, `/share/calibre/cwa-book-ingest` and `/share/calibre/plugins` on first start. Mount your `share/` over Samba or use the File Editor add-on to drop books in.
 
 ### Network-share setup (NAS users / migrating from existing CWA)
 
-1. **Mount your NAS** to `/share/<name>` using the Home Assistant Samba/NFS client (Settings → System → Storage → Add network storage). Or use the Network Storage helper in HAOS to mount under `/share/`.
+Only the library and ingest folders (and, if you like, the plugins and metadata-provider folders) go on the NAS. CWA's own `/config` always stays on the add-on's local storage: SQLite's file locking is not reliable over the network.
+
+1. **Make the share available to the add-on.** Either:
+   - **SMB/CIFS: let the add-on mount it (recommended for SMB).** Set `smb_share`, `smb_username` and `smb_password`; the share appears at `/mnt/smb`. See "SMB share" below for why.
+   - **NFS: use Home Assistant's Network Storage** (Settings → System → Storage → Add network storage), which mounts it under `/share/<name>`.
 2. **Set the paths** in this add-on's config to point inside that mount:
-   - `library_path: /share/nas/calibre/library`
-   - `ingest_path: /share/nas/calibre/ingest`
-   - (optional) `config_path: /share/nas/calibre/config` — host CWA's app database, user accounts, and settings on the share too. Leave empty to keep `/config` on HA's local `/data`.
-   - (optional) `plugins_path: /share/nas/calibre/plugins`
-3. **Set `network_share_mode: true`** — required for SMB/NFS to disable SQLite WAL (which corrupts on network shares) on both `metadata.db` and CWA's `app.db`, and to switch the ingest watcher from inotify to polling.
+   - `library_path: /mnt/smb/calibre-library` (or `/share/<name>/calibre-library` for NFS)
+   - `ingest_path: /mnt/smb/cwa-book-ingest`
+   - (optional) `plugins_path: /mnt/smb/plugins`
+   - (optional) `metadata_providers_path: /mnt/smb/metadata-providers`
+3. **Set `network_share_mode: true`** for NFS. It disables SQLite WAL (which corrupts on network shares) on `metadata.db` and switches the ingest watcher from inotify to polling. It is turned on automatically when `smb_share` is set.
 4. **Migrating from an existing CWA install**:
    - Stop your old container.
    - Copy `metadata.db` and the book folders to the new `library_path`.
-   - To preserve user accounts and CWA's app database, you have two options:
-     - **Add-on-local `/data`-backed `/config`**: with `config_path` cleared the add-on keeps `/config` on its private `/data` directory, which isn't reachable from Samba. Either leave `config_path` on a `/share/...` path so you can copy files in directly, or use the SSH/Terminal add-on and copy your old CWA `/config` contents into `/data` (path inside this add-on's container).
-     - **Network-share `/config`** (what the shipped `config_path` gives you): copy your old CWA `/config` contents into the directory `config_path` names (`/share/calibre/config` out of the box, or e.g. `/share/nas/calibre/config`).
-   - Delete the sentinel from wherever `/config` lives: `rm <config_path>/.cwa-initialized`, or `rm /data/.cwa-initialized` if you cleared `config_path`, so the add-on doesn't think it's already initialized.
+   - To keep user accounts and CWA's app database, copy your old CWA `/config` contents into a folder the add-on can see (e.g. `/share/calibre/config`), set `config_path` to that folder, and start the add-on. It imports the folder into its local storage once; then clear `config_path`. The import only happens while the local storage has no `app.db` yet — on an add-on that has already started without one, first delete the local `app.db` and the import marker with the SSH/Terminal add-on (`docker exec` into the add-on, then `rm /config/app.db /config/.cwa-config-imported`).
    - Restart the add-on.
 
-> Switching `config_path` after the add-on has run reseeds the new target from whatever `/config` points to at startup. On a brand-new install that's the image defaults; on an existing install it's typically your previous persistent `/config`. If the config you want to keep is *not* what `/config` points to when the add-on starts, copy it into the new target manually *before* restarting.
+### SMB share
+
+Home Assistant's Network Storage mounts SMB/CIFS shares with every file owned by root and writable only by root, and it has no setting to change that. CWA runs as uid 1000, so on such a mount it can read your books but cannot write anything — ingest, metadata edits and `metadata.db` updates all fail. (NFS keeps the NAS's real file owners, so it does not have this problem.)
+
+Setting `smb_share` makes the add-on mount the share itself, at `/mnt/smb`, with every file owned by the uid/gid CWA runs as:
+
+```yaml
+smb_share: "//192.168.1.10/calibre"
+smb_username: "ha-calibre"
+smb_password: "…"
+library_path: /mnt/smb/calibre-library
+ingest_path: /mnt/smb/cwa-book-ingest
+```
+
+- The mount exists only inside this add-on; Home Assistant's Storage page does not list it. You can keep the same share in Network Storage too if other add-ons use it.
+- The add-on retries the mount for about 20 seconds (the NAS may still be waking up), then refuses to start rather than pointing CWA at empty folders.
+- The password is passed to the mount through a temporary file that is deleted right after, so it does not show up in the mount table or process list. It is stored in the add-on's options like any other add-on password; use a NAS account that can reach only this share.
+- `network_share_mode` is turned on automatically.
+- Paths under `/mnt/smb` are refused when `smb_share` is empty, since they would point into the container's throwaway filesystem.
 
 ## Plugins
 
@@ -61,6 +86,21 @@ Two details worth knowing:
 
 - **Adding a plugin later.** Registration is skipped once Calibre's registry has entries, so a plugin dropped in after the first successful registration is not picked up by a plain restart. Register it from the add-on shell (SSH/Terminal add-on) with `calibre-customize -a /config/.config/calibre/plugins/<file>.zip`, or clear `/config/.config/calibre/customize.py.json` and restart to re-register everything.
 - **Earlier versions.** Before v4.1.40.0 this needed a hand-written `customize.py.json`, because the base image exported a misspelled `CALIBRE_CONFIG_DIR` that Calibre ignored. That is fixed; if you wrote one by hand it is still valid and can be left alone.
+
+## Custom metadata providers
+
+CWA looks up book metadata through the providers in `/app/calibre-web-automated/cps/metadata_provider/` inside the container (Google, Amazon, Hardcover, arXiv, …). You can add your own without rebuilding the image or touching the built-in ones:
+
+1. Set `metadata_providers_path`, e.g. `/share/calibre/metadata-providers` (the folder is created if missing).
+2. Put each provider in it as a single `.py` file, written against CWA's `cps.services.Metadata` interface (see the add-on's own `arxiv.py` for an example). The file name becomes the module name, so it must be a valid Python identifier: `my_source.py`, not `my-source.py`.
+3. Restart the add-on. The log lists what was installed, and the provider shows up in CWA's metadata search.
+
+How it behaves:
+
+- **Built-ins are never overwritten.** A file named like a built-in provider (`google.py`, `arxiv.py`, …) is skipped with a warning in the log. Rename it to add it alongside.
+- **Removing a file uninstalls it** on the next restart. Clearing the option removes all of them.
+- Only top-level `.py` files are installed. Subfolders, other files and hidden files (including macOS `._*` files) are ignored. Providers can only use Python packages the image already ships.
+- **This runs code inside CWA.** Anyone who can write to that folder can run code as the CWA user, the same as with `plugins_path`. Keep it somewhere only you can write to.
 
 ## Tailscale (optional)
 
@@ -174,9 +214,13 @@ When enabled, CWA itself is pinned to `127.0.0.1` inside the container and nginx
 
 ## Persistence
 
-CWA's app database, user accounts, and settings live wherever `config_path` points — `/share/calibre/config` as shipped, which keeps them on the same share as the library and reachable over Samba. Clear `config_path` to store them in HA's per-add-on `/data` directory instead, which survives add-on upgrades and uninstalls but isn't reachable from Samba. Library files in `library_path` (e.g. under `/share`) are always independent of the add-on lifecycle.
+CWA's app database, user accounts, and settings live in the add-on's local `/data` directory, which survives add-on upgrades and is included in Home Assistant backups, but isn't reachable from Samba. Library files in `library_path` (e.g. under `/share`) are always independent of the add-on lifecycle.
 
-This add-on uses `privileged: [SYS_ADMIN]` and `apparmor: false` to bind-mount your chosen `/config` path over the base image's `VOLUME /config`. Home Assistant marks add-ons with elevated capabilities — that's expected here.
+Earlier versions could keep this on a share via `config_path`, and shipped with `config_path: /share/calibre/config`. On the first start of this version, the add-on copies CWA's config from `config_path` (or from `/share/calibre/config` if `config_path` was never saved) into `/data`, as long as `/data` does not already have an `app.db`. The old copy is left where it was but is no longer used; clear `config_path` once the log says the import is done.
+
+## Security
+
+The add-on needs the `SYS_ADMIN` capability to bind-mount your chosen paths over the base image's volumes and to mount `smb_share`. Instead of turning AppArmor off for that, it ships its own AppArmor profile (`apparmor.txt`): Docker's default container profile plus permission for exactly those mounts. Home Assistant should rate the add-on's security 5 out of 8 — one point off for `SYS_ADMIN`, one point back for the custom profile.
 
 ## Base image
 

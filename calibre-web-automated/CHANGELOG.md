@@ -7,9 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `smb_share` option (with `smb_username`, `smb_password`, `smb_domain`, `smb_version`): the add-on mounts an SMB/CIFS share itself at `/mnt/smb`, with files owned by the user CWA runs as. Home Assistant's Network Storage mounts CIFS shares writable only by root, and has no option to change that. On such a mount CWA could read the library but every write failed, which on a `/share`-hosted `config_path` crash-looped the add-on with `attempt to write a readonly database`. Point `library_path` / `ingest_path` under `/mnt/smb`. Setting `smb_share` also turns on `network_share_mode`.
+- `metadata_providers_path` option: drop custom metadata provider `.py` files in that folder and they are installed next to CWA's built-in providers on start. A file named like a built-in provider is skipped, so built-ins are never overwritten; removing a file uninstalls it on the next restart.
+- Custom AppArmor profile (`apparmor.txt`) replacing `apparmor: false`. It is Docker's default container profile plus the specific mounts the add-on makes. Home Assistant's security rating goes from 3 to 5.
+
 ### Changed
 
+- CWA's `/config` (app database, users, settings) now always lives on the add-on's local `/data`, so only the library and ingest folders sit on network storage. SQLite's locking is not reliable over the network, and `/data` is part of Home Assistant backups. `config_path` is deprecated and no longer in the default options. On first start, the add-on imports CWA's config once from `config_path` (or from the old default `/share/calibre/config` if `config_path` was never saved), as long as `/data` has no `app.db` yet. The old copy is left in place.
 - Updated the bundled Tailscale client from 1.96.4 to 1.102.3.
+
+### Fixed
+
+- Clearing an optional option in the UI (for example `config_path`, `plugins_path`, `cloudflare_team_domain` or `hardcover_token`) made the add-on read it as the literal string `null`. A cleared `config_path` then failed startup with `config_path must be an absolute path (got: null)`.
 
 ## [4.1.40.1] - 2026-08-24
 
