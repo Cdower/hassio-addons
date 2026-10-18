@@ -329,12 +329,24 @@ fi
 # Surface options as env vars for downstream s6-rc longruns. The /run/s6/container_environment
 # directory is read by `with-contenv` for every service started after this oneshot.
 mkdir -p /run/s6/container_environment
-# A CIFS share always needs network share mode: SQLite WAL corrupts on it and
-# inotify does not see changes made from other machines.
+# On the SMB share, SQLite WAL corrupts and inotify misses files added from
+# other machines. network_share_mode handles both, so turn it on when a
+# database folder is on the share; /config always lives in /data, so that is
+# only ever the library. If only the ingest folder is there, just switch the
+# watchers to polling and keep WAL for the local databases.
+on_smb_share() {
+    bashio::var.has_value "${SMB_SHARE}" \
+        && { [ "$1" = "${SMB_MOUNT_POINT}" ] || [[ "$1" == "${SMB_MOUNT_POINT}"/* ]]; }
+}
 NETWORK_SHARE_MODE=$(bashio::config 'network_share_mode')
-if bashio::var.has_value "${SMB_SHARE}" && [ "${NETWORK_SHARE_MODE}" != "true" ]; then
-    bashio::log.info "smb_share is set; enabling network_share_mode"
-    NETWORK_SHARE_MODE=true
+if [ "${NETWORK_SHARE_MODE}" != "true" ]; then
+    if on_smb_share "${LIBRARY_PATH}"; then
+        bashio::log.info "library_path is on smb_share; enabling network_share_mode"
+        NETWORK_SHARE_MODE=true
+    elif on_smb_share "${INGEST_PATH}"; then
+        bashio::log.info "ingest_path is on smb_share; watching it by polling"
+        echo -n "poll" > /run/s6/container_environment/CWA_WATCH_MODE
+    fi
 fi
 echo -n "${NETWORK_SHARE_MODE}" > /run/s6/container_environment/NETWORK_SHARE_MODE
 echo -n "$(config_value 'hardcover_token')"    > /run/s6/container_environment/HARDCOVER_TOKEN

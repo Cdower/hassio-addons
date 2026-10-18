@@ -12,10 +12,15 @@
 #   create   (config.yaml `backup_pre`)  copy every SQLite *.db under the
 #            roots to "<name>.db.cwa-snapshot" with SQLite's online backup
 #            API, which yields a consistent copy of a live database.
-#   discard  (config.yaml `backup_post`) delete the snapshots again.
-#   restore  (add-on start, before CWA runs) if snapshots are present, the
-#            add-on is starting from a restored backup: put each snapshot in
-#            place of its database, which may be the torn copy.
+#            The snapshots made are listed, last of all, in
+#            "<first root>/.cwa-backup-snapshots".
+#   discard  (config.yaml `backup_post`) delete the listed snapshots and the
+#            list.
+#   restore  (add-on start, before CWA runs) if the list is present, the
+#            add-on is starting from a restored backup: put each listed
+#            snapshot in place of its database, which may be the torn copy.
+#            Without the list it returns at once, so a normal start never
+#            walks the library.
 #
 # The live databases are deliberately NOT excluded from the backup: when the
 # add-on is stopped the Supervisor skips `backup_pre`, so no snapshots exist
@@ -42,6 +47,9 @@ SQLITE_HEADER = b"SQLite format 3\x00"
 # Files SQLite keeps next to a database; stale ones must not be applied to a
 # restored snapshot.
 SIDE_FILES = ("-wal", "-shm", "-journal")
+# Written once every snapshot is in place, so a list always names a complete
+# set. Lives in the first root (/data), which is in every backup.
+LIST_NAME = ".cwa-backup-snapshots"
 
 
 def log(msg):
@@ -117,41 +125,95 @@ def snapshot(path):
     return target
 
 
+def list_path(roots):
+    return os.path.join(roots[0], LIST_NAME)
+
+
+def write_list(roots, snapshots):
+    path = list_path(roots)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        for snap in snapshots:
+            fh.write(f"{snap}\n")
+    os.replace(tmp, path)
+
+
+def read_list(roots):
+    """Listed snapshots, or None when there is no list."""
+    try:
+        with open(list_path(roots), encoding="utf-8") as fh:
+            entries = [line.rstrip("\n") for line in fh if line.strip()]
+    except FileNotFoundError:
+        return None
+    # The list comes from a backup: only act on snapshot files inside a root.
+    real_roots = [os.path.realpath(root) for root in roots]
+    valid = []
+    for entry in entries:
+        real = os.path.realpath(entry)
+        if entry.endswith(SUFFIX) and any(
+            os.path.commonpath([real, root]) == root for root in real_roots
+        ):
+            valid.append(entry)
+        else:
+            log(f"ignoring unexpected entry in snapshot list: {entry!r}")
+    return valid
+
+
+def remove_list(roots):
+    remove(list_path(roots))
+    remove(list_path(roots) + ".tmp")
+
+
 def discard(roots):
-    removed = 0
+    """Delete the listed snapshots and the list; return how many."""
+    listed = read_list(roots) or []
+    for path in listed:
+        remove(path)
+    remove_list(roots)
+    return len(listed)
+
+
+def discard_all(roots):
+    """Delete every snapshot and temp file under the roots (full walk)."""
+    remove_list(roots)
     for path in find_snapshots(roots) + find_snapshots(roots, TMP_SUFFIX):
         remove(path)
-        removed += 1
-    return removed
 
 
 def create(roots):
-    # Leftovers from an interrupted run must not end up in this backup.
-    discard(roots)
+    # Leftovers from an interrupted run must not end up in this backup. This
+    # walks the roots anyway to find the databases, so sweep them all here.
+    discard_all(roots)
     made = []
     try:
         for path in find_databases(roots):
             made.append(snapshot(path))
+        write_list(roots, made)
     except BaseException:
         # A half-made set must not survive: on the next start it would roll
         # back the databases that did get a snapshot.
         for path in made:
             remove(path)
-        discard(roots)
+        discard_all(roots)
         raise
     return made
 
 
 def restore(roots):
+    listed = read_list(roots)
+    if listed is None:
+        return []
     restored = []
-    for snap in find_snapshots(roots):
+    for snap in listed:
+        if not os.path.isfile(snap):
+            log(f"listed snapshot {snap} is missing; leaving its database as is")
+            continue
         db = snap[: -len(SUFFIX)]
         for side in SIDE_FILES:
             remove(db + side)
         os.replace(snap, db)
         restored.append(db)
-    for tmp in find_snapshots(roots, TMP_SUFFIX):
-        remove(tmp)
+    remove_list(roots)
     return restored
 
 

@@ -15,7 +15,7 @@
 | `config_path`         | _(empty)_                | **Deprecated.** CWA's `/config` (app database, user accounts, settings) now always lives on the add-on's local storage. If set, it is only used once, to import an existing config from that folder. See "Persistence" below. |
 | `plugins_path`        | `/addon_config/plugins`  | Calibre plugins folder. Drop plugin `.zip` files here and they are registered on start; an empty folder loads nothing. Clear the option to disable the bind mount. See "Plugins" below. |
 | `metadata_providers_path` | _(empty)_            | Folder of custom metadata provider `.py` files to add next to the built-in ones. See "Custom metadata providers" below. |
-| `network_share_mode`  | `false`                  | Set `true` when the library lives on NFS/SMB. Disables SQLite WAL on `metadata.db`/`app.db` and switches the ingest watcher to polling. Always on when `smb_share` is set. |
+| `network_share_mode`  | `false`                  | Set `true` when the library lives on NFS/SMB. Disables SQLite WAL on `metadata.db`/`app.db` and switches the ingest watcher to polling. Turned on automatically when `library_path` is on `smb_share`. |
 | `smb_share`           | _(empty)_                | An SMB/CIFS share for the add-on to mount itself at `/mnt/smb`, e.g. `//192.168.1.10/calibre`. See "SMB share" below. |
 | `smb_username`        | _(empty)_                | Username for `smb_share`. Leave empty to connect as a guest.                                                             |
 | `smb_password`        | _(empty)_                | Password for `smb_share`.                                                                                                |
@@ -53,7 +53,7 @@ Only the library and ingest folders (and, if you like, the plugins and metadata-
    - `ingest_path: /mnt/smb/cwa-book-ingest`
    - (optional) `plugins_path: /mnt/smb/plugins`
    - (optional) `metadata_providers_path: /mnt/smb/metadata-providers`
-3. **Set `network_share_mode: true`** for NFS. It disables SQLite WAL (which corrupts on network shares) on `metadata.db` and switches the ingest watcher from inotify to polling. It is turned on automatically when `smb_share` is set.
+3. **Set `network_share_mode: true`** for NFS. It disables SQLite WAL (which corrupts on network shares) on `metadata.db` and switches the ingest watcher from inotify to polling. It is turned on automatically when `library_path` is on `smb_share`; if only the ingest folder is there, the add-on just switches the ingest watcher to polling.
 4. **Migrating from an existing CWA install**:
    - Stop your old container.
    - Copy `metadata.db` and the book folders to the new `library_path`.
@@ -77,7 +77,7 @@ ingest_path: /mnt/smb/cwa-book-ingest
 - The mount exists only inside this add-on; Home Assistant's Storage page does not list it. You can keep the same share in Network Storage too if other add-ons use it.
 - The add-on retries the mount for about 20 seconds (the NAS may still be waking up), then refuses to start rather than pointing CWA at empty folders.
 - The password is passed to the mount through a temporary file that is deleted right after, so it does not show up in the mount table or process list. It is stored in the add-on's options like any other add-on password; use a NAS account that can reach only this share.
-- `network_share_mode` is turned on automatically.
+- `network_share_mode` is turned on automatically when `library_path` is on the share. If only `ingest_path` is, the add-on only switches the ingest watcher to polling (`CWA_WATCH_MODE=poll`), since inotify does not see files added to the share from other machines.
 - Paths under `/mnt/smb` are refused when `smb_share` is empty, since they would point into the container's throwaway filesystem.
 
 ## Plugins
@@ -235,8 +235,9 @@ Home Assistant backs add-ons up by copying their files while they keep running, 
 So the add-on takes care of it:
 
 1. Just before a backup, Home Assistant runs the add-on's `backup_pre` command. It copies every SQLite database in `/data` and `/addon_config` to `<name>.db.cwa-snapshot`, using SQLite's own backup API, which produces a consistent copy of a database in use.
-2. Home Assistant copies the folders, snapshots included. `backup_post` then deletes the snapshots.
-3. When the add-on starts from a restored backup, it finds the snapshots and puts each one in place of its database (deleting any leftover `-wal`/`-shm`/`-journal` files) before CWA opens anything.
+   Last, it writes a list of those snapshots to `/data/.cwa-backup-snapshots`.
+2. Home Assistant copies the folders, snapshots and list included. `backup_post` then deletes the snapshots and the list.
+3. When the add-on starts from a restored backup, it finds the list and puts each listed snapshot in place of its database (deleting any leftover `-wal`/`-shm`/`-journal` files) before CWA opens anything. On a normal start there is no list, so the add-on doesn't search the library for snapshots.
 
 If the add-on was stopped when the backup was taken, Home Assistant skips `backup_pre`; the database files are then not in use and are copied as they are. If the add-on is restarted while a backup is running, the next start rolls the databases back to when that backup began; changes made during the backup are lost.
 

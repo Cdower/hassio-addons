@@ -119,13 +119,52 @@ class DbSnapshotTest(unittest.TestCase):
         self.assertEqual(db_snapshot.restore(self.roots), [])
         self.assertEqual(rows(app_db), [1])
 
-    def test_discard_removes_snapshots_and_temp_files(self):
+    def test_discard_removes_listed_snapshots_and_list(self):
         self.make_db(os.path.join(self.data, "app.db"), [1]).close()
         db_snapshot.create(self.roots)
-        open(os.path.join(self.data, "cwa.db" + db_snapshot.TMP_SUFFIX), "w").close()
-        self.assertEqual(db_snapshot.discard(self.roots), 2)
+        self.assertEqual(db_snapshot.discard(self.roots), 1)
         self.assertEqual(db_snapshot.find_snapshots(self.roots), [])
+        self.assertFalse(os.path.exists(db_snapshot.list_path(self.roots)))
         self.assertTrue(os.path.exists(os.path.join(self.data, "app.db")))
+
+    def test_create_lists_its_snapshots_and_sweeps_strays(self):
+        app_db = os.path.join(self.data, "app.db")
+        self.make_db(app_db, [1]).close()
+        stray_tmp = os.path.join(self.library, "metadata.db" + db_snapshot.TMP_SUFFIX)
+        stray = os.path.join(self.library, "gone.db" + db_snapshot.SUFFIX)
+        for path in (stray_tmp, stray):
+            open(path, "w").close()
+        made = db_snapshot.create(self.roots)
+        self.assertEqual(db_snapshot.read_list(self.roots), made)
+        self.assertFalse(os.path.exists(stray_tmp))
+        self.assertFalse(os.path.exists(stray))
+
+    def test_restore_without_list_does_not_touch_stray_snapshots(self):
+        # No list means a normal start: nothing is walked or restored, even
+        # if a snapshot file happens to be lying around.
+        app_db = os.path.join(self.data, "app.db")
+        self.make_db(app_db, [1]).close()
+        stray = app_db + db_snapshot.SUFFIX
+        self.make_db(stray, [99]).close()
+        self.assertEqual(db_snapshot.restore(self.roots), [])
+        self.assertEqual(rows(app_db), [1])
+
+    def test_restore_ignores_entries_outside_roots_and_missing_snapshots(self):
+        app_db = os.path.join(self.data, "app.db")
+        self.make_db(app_db, [1]).close()
+        outside_dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, outside_dir)
+        outside = os.path.join(outside_dir, "x.db" + db_snapshot.SUFFIX)
+        open(outside, "w").close()
+        with open(db_snapshot.list_path(self.roots), "w") as fh:
+            fh.write(f"{outside}\n")
+            fh.write(f"{app_db + db_snapshot.SUFFIX}\n")  # listed, but missing
+            fh.write(f"{os.path.join(self.data, 'not-a-snapshot')}\n")
+        with self.quiet:
+            self.assertEqual(db_snapshot.restore(self.roots), [])
+        self.assertTrue(os.path.exists(outside))
+        self.assertEqual(rows(app_db), [1])
+        self.assertFalse(os.path.exists(db_snapshot.list_path(self.roots)))
 
     def test_create_replaces_stale_snapshots(self):
         app_db = os.path.join(self.data, "app.db")
@@ -148,6 +187,7 @@ class DbSnapshotTest(unittest.TestCase):
             db_snapshot.create(self.roots)
         self.assertEqual(db_snapshot.find_snapshots(self.roots), [])
         self.assertEqual(db_snapshot.find_snapshots(self.roots, db_snapshot.TMP_SUFFIX), [])
+        self.assertFalse(os.path.exists(db_snapshot.list_path(self.roots)))
 
     def test_main_create_failure_exits_nonzero(self):
         with open(os.path.join(self.data, "broken.db"), "wb") as fh:
