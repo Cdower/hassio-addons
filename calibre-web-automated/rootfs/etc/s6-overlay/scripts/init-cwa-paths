@@ -48,7 +48,8 @@ bashio::log.info "Configuring CWA paths..."
 # refuses to overwrite (e.g. /config/.config/calibre/plugins after the image
 # seeds it). Idempotent: inspects /proc/self/mountinfo via findmnt to confirm
 # whether target is already bind-mounted from source before mounting.
-# Requires privileged: [SYS_ADMIN] + apparmor: false in config.yaml.
+# Requires privileged: [SYS_ADMIN] in config.yaml and a matching mount rule
+# in apparmor.txt for each target.
 bind_user_path() {
     local source=$1 target=$2
     local real_source
@@ -133,7 +134,7 @@ import_legacy_config() {
         return 0
     fi
     if bashio::fs.file_exists /data/app.db; then
-        bashio::log.info "Local storage already has an app.db; not importing from ${source}"
+        bashio::log.warning "Local storage already has an app.db; not importing from ${source}. CWA uses the local copy; the one in ${source} is ignored."
         return 0
     fi
     if ! bashio::fs.file_exists "${source}/app.db"; then

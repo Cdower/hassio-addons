@@ -25,11 +25,14 @@ fi
 if [[ "${PROVIDERS_PATH}" != /* ]]; then
     bashio::log.warning \
         "metadata_providers_path must be an absolute path (got: ${PROVIDERS_PATH}); custom metadata providers disabled"
+    # Disabled means none installed: remove what a previous run installed.
+    /lsiopy/bin/python3 "${INSTALLER}" || true
     exit 0
 fi
 
 if ! mkdir -p "${PROVIDERS_PATH}"; then
     bashio::log.warning "Could not create ${PROVIDERS_PATH}; custom metadata providers disabled"
+    /lsiopy/bin/python3 "${INSTALLER}" || true
     exit 0
 fi
 

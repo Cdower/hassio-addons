@@ -30,7 +30,10 @@ import sys
 import tempfile
 
 DEFAULT_DEST = "/app/calibre-web-automated/cps/metadata_provider"
-DEFAULT_MANIFEST = "/run/cwa-metadata-providers.manifest"
+# Kept in the container's writable layer, like DEFAULT_DEST, so both share a
+# lifetime. On /run (a tmpfs) it would vanish on a container restart while the
+# installed files stayed, and they would then be mistaken for built-ins.
+DEFAULT_MANIFEST = "/var/lib/cwa-metadata-providers/manifest"
 
 # Must be importable as cps.metadata_provider.<stem>.
 MODULE_FILE_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*\.py$")
