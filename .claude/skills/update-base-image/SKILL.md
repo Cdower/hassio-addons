@@ -73,6 +73,11 @@ corresponding add-on code/tests must be updated:
 - `cwa-init` is still the service every CWA service waits on: the add-on makes
   it depend on `init-cwa-metadata-providers` so providers are installed before
   anything imports them (`ls root/etc/s6-overlay/s6-rc.d/*/dependencies.d`).
+- SQLite files CWA keeps in `/config` and the library: backups rely on
+  `rootfs/opt/cwa-backup/db_snapshot.py` snapshotting every `*.db` under
+  `/data` and `/addon_config` (`backup_pre`). A new database with another
+  extension (`grep -rhoE "/config/[A-Za-z0-9_./-]*\.(db|sqlite[0-9]?)" cps
+  scripts root`) would be backed up torn — extend the script if one appears.
 - `/lsiopy` venv still exists and ships `cryptography` + `werkzeug`
   (`grep -n lsiopy Dockerfile`, `grep -in "cryptography\|werkzeug" pyproject.toml`
   in the upstream clone) — the Dockerfile pip-installs PyJWT into it and

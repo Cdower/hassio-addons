@@ -10,10 +10,10 @@
 
 | Option                | Default                  | Description                                                                                                              |
 | --------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
-| `library_path`        | `/share/calibre/calibre-library` | Where the Calibre library (`metadata.db` + book folders) lives.                                                          |
-| `ingest_path`         | `/share/calibre/cwa-book-ingest`  | Drop EPUB/PDF/MOBI/etc. here for automatic ingest. Files are deleted after processing.                                   |
+| `library_path`        | `/addon_config/calibre-library` | Where the Calibre library (`metadata.db` + book folders) lives.                                                          |
+| `ingest_path`         | `/addon_config/cwa-book-ingest`  | Drop EPUB/PDF/MOBI/etc. here for automatic ingest. Files are deleted after processing.                                   |
 | `config_path`         | _(empty)_                | **Deprecated.** CWA's `/config` (app database, user accounts, settings) now always lives on the add-on's local storage. If set, it is only used once, to import an existing config from that folder. See "Persistence" below. |
-| `plugins_path`        | `/share/calibre/plugins` | Calibre plugins folder. Drop plugin `.zip` files here and they are registered on start; an empty folder loads nothing. Clear the option to disable the bind mount. See "Plugins" below. |
+| `plugins_path`        | `/addon_config/plugins`  | Calibre plugins folder. Drop plugin `.zip` files here and they are registered on start; an empty folder loads nothing. Clear the option to disable the bind mount. See "Plugins" below. |
 | `metadata_providers_path` | _(empty)_            | Folder of custom metadata provider `.py` files to add next to the built-in ones. See "Custom metadata providers" below. |
 | `network_share_mode`  | `false`                  | Set `true` when the library lives on NFS/SMB. Disables SQLite WAL on `metadata.db`/`app.db` and switches the ingest watcher to polling. Always on when `smb_share` is set. |
 | `smb_share`           | _(empty)_                | An SMB/CIFS share for the add-on to mount itself at `/mnt/smb`, e.g. `//192.168.1.10/calibre`. See "SMB share" below. |
@@ -37,7 +37,9 @@
 
 ### Local-volume setup (recommended for new users)
 
-Leave the defaults. The add-on creates `/share/calibre/calibre-library`, `/share/calibre/cwa-book-ingest` and `/share/calibre/plugins` on first start. Mount your `share/` over Samba or use the File Editor add-on to drop books in.
+Leave the defaults. The add-on creates `calibre-library`, `cwa-book-ingest` and `plugins` in its own config folder, which it sees as `/addon_config`. On the Home Assistant host that folder is `/addon_configs/<id>_calibre-web-automated/`; the Samba add-on shares it as `addon_configs`, and the File Editor add-on can reach it too, so that is where you drop books in. Everything there is part of the add-on's own backups (see "Backups" below).
+
+> Earlier versions shipped these defaults under `/share/calibre/`, which the add-on's backups don't include. An install that never changed these options keeps using its existing `/share/calibre/...` folders after the upgrade, and the log says so; move the folders into the add-on's config folder (and restart) to bring them into its backups.
 
 ### Network-share setup (NAS users / migrating from existing CWA)
 
@@ -91,7 +93,7 @@ Two details worth knowing:
 
 CWA looks up book metadata through the providers in `/app/calibre-web-automated/cps/metadata_provider/` inside the container (Google, Amazon, Hardcover, arXiv, …). You can add your own without rebuilding the image or touching the built-in ones:
 
-1. Set `metadata_providers_path`, e.g. `/share/calibre/metadata-providers` (the folder is created if missing).
+1. Set `metadata_providers_path`, e.g. `/addon_config/metadata-providers` (the folder is created if missing).
 2. Put each provider in it as a single `.py` file, written against CWA's `cps.services.Metadata` interface (see the add-on's own `arxiv.py` for an example). The file name becomes the module name, so it must be a valid Python identifier: `my_source.py`, not `my-source.py`.
 3. Restart the add-on. The log lists what was installed, and the provider shows up in CWA's metadata search.
 
@@ -210,13 +212,35 @@ When enabled, CWA itself is pinned to `127.0.0.1` inside the container and nginx
 
 - **Kobo sync URLs**: CWA generates absolute URLs for Kobo sync based on the host it sees the request from. Make sure your Kobo can reach CWA at that host:port (open Settings → Server → Server URLs in CWA to inspect the URL it generated). If CWA is fronted by Cloudflare/nginx-proxy-manager/Traefik, bump `trusted_proxy_count` so CWA picks up the original host from `X-Forwarded-Host`.
 - **File ownership**: The app runs as uid/gid 1000 to match HA's `/share` and `/media`, so files it writes there are owned 1000:1000. If you also access the share over Samba and need different ownership, change it on the host or via Samba's `force user` option.
-- **Backups**: CWA's verbose `cwa.log` and the temporary `processed_books/` directory are excluded from HA backups (see `backup_exclude` in `config.yaml`). Library files in `/share` are not in HA backups by design — back those up separately.
 
 ## Persistence
 
-CWA's app database, user accounts, and settings live in the add-on's local `/data` directory, which survives add-on upgrades and is included in Home Assistant backups, but isn't reachable from Samba. Library files in `library_path` (e.g. under `/share`) are always independent of the add-on lifecycle.
+CWA's app database, user accounts, and settings live in the add-on's local `/data` directory, which survives add-on upgrades and is included in Home Assistant backups, but isn't reachable from Samba. The library, ingest and plugins folders live in the add-on's config folder (`/addon_config`) by default, also part of its backups, or wherever their options point.
 
 Earlier versions could keep this on a share via `config_path`, and shipped with `config_path: /share/calibre/config`. On the first start of this version, the add-on copies CWA's config from `config_path` (or from `/share/calibre/config` if `config_path` was never saved) into `/data`, as long as `/data` does not already have an `app.db`. The old copy is left where it was but is no longer used; clear `config_path` once the log says the import is done.
+
+## Backups
+
+A Home Assistant backup of this add-on contains exactly two folders: its `/data` (CWA's app database, users, settings, Tailscale state) and its config folder `/addon_config` (by default the library, ingest and plugins folders). Nothing else is in it:
+
+- **Paths on the SMB share** (`/mnt/smb/...`) live on your NAS; back them up there.
+- **Paths under `/share` or `/media`** are only in full Home Assistant backups (or partial ones with the Share/Media folder ticked), never in the add-on's own backup, including the one Home Assistant takes automatically before an add-on update. The add-on logs a warning at startup for every path option outside `/addon_config`, `/data` and `/mnt/smb`.
+
+Keeping the library in `/addon_config` means it is copied into every backup of the add-on, including those automatic pre-update ones. That is the point, but with a large library it makes those backups large and slower.
+
+### Databases
+
+Home Assistant backs add-ons up by copying their files while they keep running, and it does nothing special for databases. Copying a SQLite database that is being written to (or one in WAL mode, whose latest changes sit in a separate `-wal` file) can capture a damaged or out-of-date copy. CWA has several: `app.db` and `cwa.db` in `/data`, and the library's `metadata.db`.
+
+So the add-on takes care of it:
+
+1. Just before a backup, Home Assistant runs the add-on's `backup_pre` command. It copies every SQLite database in `/data` and `/addon_config` to `<name>.db.cwa-snapshot`, using SQLite's own backup API, which produces a consistent copy of a database in use.
+2. Home Assistant copies the folders, snapshots included. `backup_post` then deletes the snapshots.
+3. When the add-on starts from a restored backup, it finds the snapshots and puts each one in place of its database (deleting any leftover `-wal`/`-shm`/`-journal` files) before CWA opens anything.
+
+If the add-on was stopped when the backup was taken, Home Assistant skips `backup_pre`; the database files are then not in use and are copied as they are. If the add-on is restarted while a backup is running, the next start rolls the databases back to when that backup began; changes made during the backup are lost.
+
+`cwa.log` and the temporary `processed_books/` folder are left out of backups.
 
 ## Security
 
