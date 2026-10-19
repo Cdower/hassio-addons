@@ -11,32 +11,20 @@
 # ==============================================================================
 
 INSTALLER=/opt/cwa-metadata-providers/install_providers.py
-PROVIDERS_PATH=""
-if bashio::config.has_value 'metadata_providers_path'; then
-    PROVIDERS_PATH=$(bashio::config 'metadata_providers_path')
-fi
+# Set by init-cwa-paths from `metadata_providers_path`; empty when unset.
+PROVIDERS_PATH=${CWA_METADATA_PROVIDERS_PATH:-}
 
-if ! bashio::var.has_value "${PROVIDERS_PATH}"; then
-    # Still run the installer: it removes anything a previous run installed.
-    /lsiopy/bin/python3 "${INSTALLER}" || true
-    exit 0
-fi
-
-if [[ "${PROVIDERS_PATH}" != /* ]]; then
+# Without --source the installer only removes what a previous run installed,
+# which is what "disabled" means.
+SOURCE=()
+if [[ "${PROVIDERS_PATH}" == /* ]] && mkdir -p "${PROVIDERS_PATH}"; then
+    SOURCE=(--source "${PROVIDERS_PATH}")
+elif [ -n "${PROVIDERS_PATH}" ]; then
     bashio::log.warning \
-        "metadata_providers_path must be an absolute path (got: ${PROVIDERS_PATH}); custom metadata providers disabled"
-    # Disabled means none installed: remove what a previous run installed.
-    /lsiopy/bin/python3 "${INSTALLER}" || true
-    exit 0
+        "metadata_providers_path must be an absolute path to a folder that can be created (got: ${PROVIDERS_PATH}); custom metadata providers disabled"
 fi
 
-if ! mkdir -p "${PROVIDERS_PATH}"; then
-    bashio::log.warning "Could not create ${PROVIDERS_PATH}; custom metadata providers disabled"
-    /lsiopy/bin/python3 "${INSTALLER}" || true
-    exit 0
-fi
-
-if ! /lsiopy/bin/python3 "${INSTALLER}" --source "${PROVIDERS_PATH}"; then
+if ! /lsiopy/bin/python3 "${INSTALLER}" "${SOURCE[@]}" && [ ${#SOURCE[@]} -gt 0 ]; then
     bashio::log.warning "Installing custom metadata providers failed (see above); continuing startup"
 fi
 

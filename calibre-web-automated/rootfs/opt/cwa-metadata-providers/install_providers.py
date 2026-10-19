@@ -43,6 +43,13 @@ def log(msg):
     print(f"[cwa-metadata-providers] {msg}", flush=True)
 
 
+def remove(path):
+    try:
+        os.remove(path)
+    except FileNotFoundError:
+        pass
+
+
 def read_manifest(path):
     try:
         with open(path, encoding="utf-8") as fh:
@@ -61,12 +68,8 @@ def write_manifest(path, names):
 def remove_previous(dest, manifest_names):
     for name in sorted(manifest_names):
         # The manifest is ours, but never follow it outside dest.
-        if os.path.basename(name) != name:
-            continue
-        try:
-            os.remove(os.path.join(dest, name))
-        except FileNotFoundError:
-            pass
+        if os.path.basename(name) == name:
+            remove(os.path.join(dest, name))
 
 
 def taken_stems(dest):
@@ -90,19 +93,18 @@ def copy_into(src, dest_dir, name):
         os.chmod(tmp, 0o644)
         os.replace(tmp, os.path.join(dest_dir, name))
     except BaseException:
-        try:
-            os.remove(tmp)
-        except FileNotFoundError:
-            pass
+        remove(tmp)
         raise
 
 
 def install(source, dest, manifest):
     """Install providers from source into dest; return the installed names."""
-    remove_previous(dest, read_manifest(manifest))
-    # Record the removal before installing anything, so a failure part-way
-    # through cannot leave a stale manifest naming files that are now gone.
-    write_manifest(manifest, set())
+    previous = read_manifest(manifest)
+    if previous:
+        remove_previous(dest, previous)
+        # Record the removal before installing anything, so a failure part-way
+        # through cannot leave a stale manifest naming files that are now gone.
+        write_manifest(manifest, set())
 
     if source is None:
         return []

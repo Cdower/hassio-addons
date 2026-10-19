@@ -10,9 +10,16 @@ set -e
 # (which is what clearing an optional field in the UI does), and
 # `bashio::var.has_value` counts "null" as a value.
 config_value() {
-    if bashio::config.has_value "$1"; then
-        bashio::config "$1"
+    local value
+    value=$(bashio::config "$1")
+    if [ "${value}" != "null" ]; then
+        printf '%s' "${value}"
     fi
+}
+
+# True when path $2 is base $1 or lies under it.
+path_under() {
+    [ "$2" = "$1" ] || [[ "$2" == "$1"/* ]]
 }
 
 LIBRARY_PATH=$(config_value 'library_path')
@@ -21,6 +28,15 @@ CONFIG_PATH=$(config_value 'config_path')
 PLUGINS_PATH=$(config_value 'plugins_path')
 PROVIDERS_PATH=$(config_value 'metadata_providers_path')
 SMB_SHARE=$(config_value 'smb_share')
+
+# The path options, as option:VARIABLE pairs, for the checks that apply to
+# all of them.
+PATH_OPTIONS=(
+    library_path:LIBRARY_PATH
+    ingest_path:INGEST_PATH
+    plugins_path:PLUGINS_PATH
+    metadata_providers_path:PROVIDERS_PATH
+)
 
 # Where `smb_share` is mounted inside the container. Path options point under
 # it to use the share.
@@ -72,7 +88,7 @@ bind_user_path() {
 # credentials file rather than the mount options, so it never appears in
 # /proc/mounts or a process listing.
 mount_smb_share() {
-    local opts cred="" err="" attempt
+    local opts cred="" err="" attempt version username domain
 
     if findmnt --noheadings --mountpoint "${SMB_MOUNT_POINT}" > /dev/null 2>&1; then
         return 0
@@ -82,17 +98,20 @@ mount_smb_share() {
     # forceuid/forcegid: ignore any owner the server reports (Unix
     # extensions), so every file is APP_UID:APP_GID.
     opts="uid=${APP_UID},gid=${APP_GID},forceuid,forcegid,file_mode=0664,dir_mode=0775,iocharset=utf8"
-    if bashio::config.has_value 'smb_version'; then
-        opts+=",vers=$(bashio::config 'smb_version')"
+    version=$(config_value 'smb_version')
+    if [ -n "${version}" ]; then
+        opts+=",vers=${version}"
     fi
-    if bashio::config.has_value 'smb_username'; then
+    username=$(config_value 'smb_username')
+    if [ -n "${username}" ]; then
         # mktemp creates the file 0600.
         cred=$(mktemp /run/cwa-smb-credentials.XXXXXX)
+        domain=$(config_value 'smb_domain')
         {
-            printf 'username=%s\n' "$(bashio::config 'smb_username')"
+            printf 'username=%s\n' "${username}"
             printf 'password=%s\n' "$(config_value 'smb_password')"
-            if bashio::config.has_value 'smb_domain'; then
-                printf 'domain=%s\n' "$(bashio::config 'smb_domain')"
+            if [ -n "${domain}" ]; then
+                printf 'domain=%s\n' "${domain}"
             fi
         } > "${cred}"
         opts+=",credentials=${cred}"
@@ -160,7 +179,7 @@ import_legacy_config() {
             continue
         fi
         mv "${entry}" "/data/${name}"
-        chown -R "${APP_UID}:${APP_GID}" "/data/${name}"
+        chown_if_root -R "${APP_UID}:${APP_GID}" "/data/${name}"
     done
     rm -rf "${staging}"
     printf '%s\n' "${source}" > "${IMPORT_MARKER}"
@@ -170,10 +189,13 @@ import_legacy_config() {
 }
 
 IMPORT_MARKER=/data/.cwa-config-imported
+# Where earlier versions shipped their default folders, outside the add-on's
+# backups.
+LEGACY_ROOT=/share/calibre
 # The shipped config_path before /config moved to local storage. An install
 # that never saved its options has no config_path stored at all, so look here
 # too, or that install would come up with an empty config.
-LEGACY_DEFAULT_CONFIG=/share/calibre/config
+LEGACY_DEFAULT_CONFIG=${LEGACY_ROOT}/config
 
 # The add-on's addon_configs folder (`map: addon_config` in config.yaml). Like
 # /data it is part of the add-on's own backups, and unlike /data it is
@@ -181,21 +203,20 @@ LEGACY_DEFAULT_CONFIG=/share/calibre/config
 # live here.
 ADDON_CONFIG=/addon_config
 
-# Earlier versions shipped those defaults under /share/calibre, outside the
-# add-on's backups. An install that never saved its options picks up the new
+# Earlier versions shipped those defaults under LEGACY_ROOT, with the same
+# folder names. An install that never saved its options picks up the new
 # defaults on upgrade; if its data is still in the old default folder, keep
 # using that instead of starting an empty one.
-keep_legacy_default() {
-    local var=$1 new_default=$2 old_default=$3
+for pair in LIBRARY_PATH:calibre-library INGEST_PATH:cwa-book-ingest PLUGINS_PATH:plugins; do
+    var=${pair%%:*}
+    new_default=${ADDON_CONFIG}/${pair#*:}
+    old_default=${LEGACY_ROOT}/${pair#*:}
     if [ "${!var}" = "${new_default}" ] && [ ! -e "${new_default}" ] \
             && [ -e "${old_default}" ]; then
         bashio::log.warning "Using ${old_default} instead of the new default ${new_default}, because your existing data is there. It is not in this add-on's backups; move it to ${new_default} to include it."
         printf -v "${var}" '%s' "${old_default}"
     fi
-}
-keep_legacy_default LIBRARY_PATH "${ADDON_CONFIG}/calibre-library" /share/calibre/calibre-library
-keep_legacy_default INGEST_PATH "${ADDON_CONFIG}/cwa-book-ingest" /share/calibre/cwa-book-ingest
-keep_legacy_default PLUGINS_PATH "${ADDON_CONFIG}/plugins" /share/calibre/plugins
+done
 
 # Validate user-supplied paths up front. library_path and ingest_path are
 # required by the schema; config_path and plugins_path are optional. All
@@ -217,7 +238,7 @@ if bashio::var.has_value "${CONFIG_PATH}"; then
     fi
     # Must not be /config or anything under /config/ to avoid seeding /config
     # onto itself and then removing it.
-    if [ "${CONFIG_PATH}" = "/config" ] || [[ "${CONFIG_PATH}" == /config/* ]]; then
+    if path_under /config "${CONFIG_PATH}"; then
         bashio::exit.nok "config_path must not be /config or a path under /config/ (got: ${CONFIG_PATH})"
     fi
 fi
@@ -228,10 +249,10 @@ if bashio::var.has_value "${SMB_SHARE}"; then
 else
     # Without a share, SMB_MOUNT_POINT is a plain directory in the container's
     # writable layer, which is thrown away whenever the add-on is recreated.
-    for path in "${LIBRARY_PATH}" "${INGEST_PATH}" "${CONFIG_PATH}" \
-            "${PLUGINS_PATH}" "${PROVIDERS_PATH}"; do
-        if [ "${path}" = "${SMB_MOUNT_POINT}" ] || [[ "${path}" == "${SMB_MOUNT_POINT}"/* ]]; then
-            bashio::exit.nok "${path} is under ${SMB_MOUNT_POINT}, but smb_share is not set"
+    for pair in "${PATH_OPTIONS[@]}" config_path:CONFIG_PATH; do
+        var=${pair#*:}
+        if path_under "${SMB_MOUNT_POINT}" "${!var}"; then
+            bashio::exit.nok "${pair%%:*} (${!var}) is under ${SMB_MOUNT_POINT}, but smb_share is not set"
         fi
     done
 fi
@@ -243,26 +264,20 @@ fi
 # Home Assistant backs up only /data and /addon_config with this add-on.
 # Paths on the SMB share are the NAS's to back up; anything else (e.g. under
 # /share or /media) is covered only by full backups that include that folder.
-for option in library_path ingest_path plugins_path metadata_providers_path; do
-    case "${option}" in
-        library_path) path=${LIBRARY_PATH} ;;
-        ingest_path) path=${INGEST_PATH} ;;
-        plugins_path) path=${PLUGINS_PATH} ;;
-        metadata_providers_path) path=${PROVIDERS_PATH} ;;
-    esac
-    case "${path}" in
-        "" | /data | /data/* | "${ADDON_CONFIG}" | "${ADDON_CONFIG}"/* \
-            | "${SMB_MOUNT_POINT}" | "${SMB_MOUNT_POINT}"/*) ;;
-        *)
-            bashio::log.warning "${option} (${path}) is not in this add-on's backups; only full Home Assistant backups that include its folder cover it. Use a path under ${ADDON_CONFIG} to include it."
-            ;;
-    esac
+for pair in "${PATH_OPTIONS[@]}"; do
+    var=${pair#*:}
+    path=${!var}
+    if [ -n "${path}" ] && ! path_under /data "${path}" \
+            && ! path_under "${ADDON_CONFIG}" "${path}" \
+            && ! path_under "${SMB_MOUNT_POINT}" "${path}"; then
+        bashio::log.warning "${pair%%:*} (${path}) is not in this add-on's backups; only full Home Assistant backups that include its folder cover it. Use a path under ${ADDON_CONFIG} to include it."
+    fi
 done
 
 # Starting from a restored backup: put the consistent database copies taken
 # by `backup_pre` in place of the possibly torn live files (see
 # db_snapshot.py). Must run before anything opens the databases.
-if ! /lsiopy/bin/python3 /opt/cwa-backup/db_snapshot.py restore /data "${ADDON_CONFIG}"; then
+if ! /lsiopy/bin/python3 /opt/cwa-backup/db_snapshot.py restore; then
     bashio::exit.nok "Restoring databases from backup snapshots failed (see above)"
 fi
 mkdir -p "${ADDON_CONFIG}"
@@ -335,8 +350,7 @@ mkdir -p /run/s6/container_environment
 # only ever the library. If only the ingest folder is there, just switch the
 # watchers to polling and keep WAL for the local databases.
 on_smb_share() {
-    bashio::var.has_value "${SMB_SHARE}" \
-        && { [ "$1" = "${SMB_MOUNT_POINT}" ] || [[ "$1" == "${SMB_MOUNT_POINT}"/* ]]; }
+    bashio::var.has_value "${SMB_SHARE}" && path_under "${SMB_MOUNT_POINT}" "$1"
 }
 NETWORK_SHARE_MODE=$(bashio::config 'network_share_mode')
 if [ "${NETWORK_SHARE_MODE}" != "true" ]; then
@@ -349,6 +363,8 @@ if [ "${NETWORK_SHARE_MODE}" != "true" ]; then
     fi
 fi
 echo -n "${NETWORK_SHARE_MODE}" > /run/s6/container_environment/NETWORK_SHARE_MODE
+# Read by init-cwa-metadata-providers.
+echo -n "${PROVIDERS_PATH}" > /run/s6/container_environment/CWA_METADATA_PROVIDERS_PATH
 echo -n "$(config_value 'hardcover_token')"    > /run/s6/container_environment/HARDCOVER_TOKEN
 echo -n "$(bashio::config 'trusted_proxy_count')" > /run/s6/container_environment/TRUSTED_PROXY_COUNT
 # Cloudflare Access mode: enabled only when BOTH options are set. When on,

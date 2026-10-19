@@ -74,15 +74,15 @@ def is_sqlite(path):
         return False
 
 
-def find_databases(roots):
-    return [
-        path for path in walk_files(roots)
-        if path.endswith(".db") and not os.path.islink(path) and is_sqlite(path)
-    ]
-
-
-def find_snapshots(roots, suffix=SUFFIX):
-    return [path for path in walk_files(roots) if path.endswith(suffix)]
+def scan(roots):
+    """One walk of the roots: (SQLite databases, snapshot and temp files)."""
+    databases, snapshots = [], []
+    for path in walk_files(roots):
+        if path.endswith((SUFFIX, TMP_SUFFIX)):
+            snapshots.append(path)
+        elif path.endswith(".db") and not os.path.islink(path) and is_sqlite(path):
+            databases.append(path)
+    return databases, snapshots
 
 
 def remove(path):
@@ -112,16 +112,20 @@ def snapshot(path):
     # Not opened read-only: a WAL database whose -shm file is gone (SQLite
     # removes it when the last connection closes) cannot be read that way.
     # Reading never modifies the database.
-    src = sqlite3.connect(path, timeout=60)
     try:
-        dst = sqlite3.connect(tmp)
+        src = sqlite3.connect(path, timeout=60)
         try:
-            src.backup(dst)
+            dst = sqlite3.connect(tmp)
+            try:
+                src.backup(dst)
+            finally:
+                dst.close()
         finally:
-            dst.close()
-    finally:
-        src.close()
-    os.replace(tmp, target)
+            src.close()
+        os.replace(tmp, target)
+    except BaseException:
+        remove(tmp)
+        raise
     return target
 
 
@@ -173,20 +177,15 @@ def discard(roots):
     return len(listed)
 
 
-def discard_all(roots):
-    """Delete every snapshot and temp file under the roots (full walk)."""
-    remove_list(roots)
-    for path in find_snapshots(roots) + find_snapshots(roots, TMP_SUFFIX):
-        remove(path)
-
-
 def create(roots):
-    # Leftovers from an interrupted run must not end up in this backup. This
-    # walks the roots anyway to find the databases, so sweep them all here.
-    discard_all(roots)
+    databases, leftovers = scan(roots)
+    # Leftovers from an interrupted run must not end up in this backup.
+    remove_list(roots)
+    for path in leftovers:
+        remove(path)
     made = []
     try:
-        for path in find_databases(roots):
+        for path in databases:
             made.append(snapshot(path))
         write_list(roots, made)
     except BaseException:
@@ -194,7 +193,7 @@ def create(roots):
         # back the databases that did get a snapshot.
         for path in made:
             remove(path)
-        discard_all(roots)
+        remove_list(roots)
         raise
     return made
 

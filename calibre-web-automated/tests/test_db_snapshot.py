@@ -111,7 +111,7 @@ class DbSnapshotTest(unittest.TestCase):
         self.assertEqual(rows(app_db), [1, 2])
         for side in db_snapshot.SIDE_FILES:
             self.assertFalse(os.path.exists(app_db + side))
-        self.assertEqual(db_snapshot.find_snapshots(self.roots), [])
+        self.assertEqual(db_snapshot.scan(self.roots)[1], [])
 
     def test_restore_without_snapshots_changes_nothing(self):
         app_db = os.path.join(self.data, "app.db")
@@ -123,7 +123,7 @@ class DbSnapshotTest(unittest.TestCase):
         self.make_db(os.path.join(self.data, "app.db"), [1]).close()
         db_snapshot.create(self.roots)
         self.assertEqual(db_snapshot.discard(self.roots), 1)
-        self.assertEqual(db_snapshot.find_snapshots(self.roots), [])
+        self.assertEqual(db_snapshot.scan(self.roots)[1], [])
         self.assertFalse(os.path.exists(db_snapshot.list_path(self.roots)))
         self.assertTrue(os.path.exists(os.path.join(self.data, "app.db")))
 
@@ -185,8 +185,7 @@ class DbSnapshotTest(unittest.TestCase):
 
         with self.assertRaises(sqlite3.Error):
             db_snapshot.create(self.roots)
-        self.assertEqual(db_snapshot.find_snapshots(self.roots), [])
-        self.assertEqual(db_snapshot.find_snapshots(self.roots, db_snapshot.TMP_SUFFIX), [])
+        self.assertEqual(db_snapshot.scan(self.roots)[1], [])
         self.assertFalse(os.path.exists(db_snapshot.list_path(self.roots)))
 
     def test_main_create_failure_exits_nonzero(self):
