@@ -31,18 +31,26 @@ def block(name):
     """The top-level `name:` mapping from config.yaml, as {option: raw value}.
 
     Reads config.yaml with regexes rather than PyYAML, which the test
-    environment does not install (see requirements.txt). Nested values (the
-    `access_users` list) come back empty, which is all these tests need.
+    environment does not install (see requirements.txt). A list option
+    (`access_users`) carries its type on the following `- <type>` line and
+    comes back as that element type, because that is what the Supervisor
+    checks a missing list option against.
     """
     with open(CONFIG, encoding="utf-8") as fh:
         text = fh.read()
     body = re.search(rf"^{name}:\n((?:[ \t].*\n|\n)*)", text, re.M)
     assert body, f"no {name}: block in {CONFIG}"
     entries = {}
+    key = None
     for line in body.group(1).splitlines():
         match = re.match(r"^ {2}([a-z0-9_]+):[ \t]*(.*?)\s*$", line)
         if match:
-            entries[match.group(1)] = match.group(2)
+            key = match.group(1)
+            entries[key] = match.group(2)
+            continue
+        nested = re.match(r"^ {4}-[ \t]*(\S.*?)\s*$", line)
+        if nested and key and not entries[key]:
+            entries[key] = nested.group(1)
     return entries
 
 
@@ -54,10 +62,15 @@ class OptionsSchemaTest(unittest.TestCase):
 
     def test_options_added_after_the_first_release_are_optional(self):
         for option, kind in self.schema.items():
-            # Nested options (`access_users`) have no scalar type on their own
-            # line; this check is about the scalar ones.
-            if not kind:
-                continue
+            # Every option has to reach the "?" check below: skipping the ones
+            # the parser cannot type is how `access_users` stayed required
+            # unnoticed. A nested option that is not a list of a scalar type
+            # cannot be made optional at all, so failing here is correct.
+            self.assertTrue(
+                kind,
+                f"the parser found no type for {option}; teach block() to read "
+                "it (and check the Supervisor can treat it as optional at all)",
+            )
             if option in REQUIRED_SINCE_FIRST_RELEASE:
                 self.assertFalse(
                     kind.endswith("?"),

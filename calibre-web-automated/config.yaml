@@ -64,9 +64,12 @@ options:
 # never adds a new option to an existing install's options.json -- so a
 # required option added later makes the config page unsaveable ("Missing
 # option '<name>' in root ...") until the option is typed in by hand in YAML
-# mode. Scripts reading an option that may be absent supply its default as
+# mode. A list option carries the "?" on its element type (`- email?`),
+# which is what the Supervisor checks a missing list option against.
+# Scripts reading an option that may be absent supply its default as
 # `bashio::config`'s second argument; `bashio::config.true` already reads a
-# missing option as false.
+# missing option as false, and a missing option read without a default comes
+# back as the literal string "null".
 schema:
   library_path: str
   books_path: str?
@@ -87,7 +90,7 @@ schema:
   cloudflare_team_domain: str?
   cloudflare_access_aud: password?
   access_users:
-    - email
+    - email?
   tailscale_authkey: password?
   tailscale_hostname: str?
   tailscale_serve: bool?
