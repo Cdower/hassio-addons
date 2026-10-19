@@ -1,0 +1,34 @@
+#!/command/with-contenv bashio
+# ==============================================================================
+# Point CWA's split library settings at books_path. Runs after
+# cwa-auto-library (so app.db exists and config_calibre_dir is set) and before
+# CWA starts.
+#
+# With books_path set, split library mode is required, not optional: without
+# it CWA would look for the book files next to metadata.db and put newly
+# ingested books there. So a failure here stops startup. The state file
+# written by init-cwa-paths records that *this add-on* manages split library
+# mode, so it is only switched back off if the add-on turned it on (a split
+# library set up by hand in CWA's admin settings is left alone).
+# ==============================================================================
+
+STATE=/data/.cwa-split-library
+SPLIT=/opt/cwa-split-library/split_library.py
+
+if [ "${CWA_SPLIT_LIBRARY}" = "true" ]; then
+    if ! s6-setuidgid abc /lsiopy/bin/python3 "${SPLIT}" enable \
+            --books-dir /calibre-books; then
+        bashio::exit.nok "Could not enable split library mode for books_path (see above)"
+    fi
+elif [ -f "${STATE}" ]; then
+    old_books=$(jq -r '.books // empty' "${STATE}" 2>/dev/null)
+    bashio::log.info "books_path cleared — turning split library mode back off"
+    if s6-setuidgid abc /lsiopy/bin/python3 "${SPLIT}" disable; then
+        rm -f "${STATE}"
+        bashio::log.warning "CWA now expects the book files next to metadata.db in library_path. If they are still in ${old_books:-the old books_path}, stop the add-on, copy metadata.db there and set library_path to that folder (or set books_path again)."
+    else
+        bashio::log.warning "Could not turn split library mode off; will retry on next start"
+    fi
+fi
+
+exit 0

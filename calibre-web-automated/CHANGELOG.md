@@ -5,6 +5,13 @@ All notable changes to this add-on will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `books_path` option: keep the book folders on the NAS while `metadata.db` stays on the add-on's local storage. It uses CWA's own split library mode, which the add-on now configures: `library_path` holds only `metadata.db`, and new books, conversions and edits write their files to `books_path`. SQLite then never runs over the network, so WAL stays on and `metadata.db` is part of the add-on's backups. On the first start with a new `books_path`, the add-on moves an existing `metadata.db` from that folder into `library_path` and renames the one left behind to `metadata.db.pre-split`; it refuses to start if both folders already hold a library with books. Changing only `library_path` later moves `metadata.db` over from the previous one (or, if that folder is gone, restores it from the `metadata_db_export` copy), instead of starting an empty library. Clearing `books_path` turns split library mode off again. The Calibre content server does not support split library mode.
+- `metadata_db_export` option: with `books_path` set, keep a read-only copy of `metadata.db` in `books_path`, so the NAS folder stays a complete Calibre library for NAS backups and Calibre desktop. It is written with SQLite's backup API after changes settle (at least every 10 minutes while the library keeps changing) and once more when the add-on stops, and renamed into place so readers never see a partial file. The add-on now allows 30 seconds to stop (`timeout: 30`, and s6's `S6_SERVICES_GRACETIME` raised to 25 s) so that last copy can finish.
+
 ## [4.1.48.1] - 2026-10-19
 
 ### Fixed

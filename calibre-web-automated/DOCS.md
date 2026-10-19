@@ -10,7 +10,9 @@
 
 | Option                | Default                  | Description                                                                                                              |
 | --------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
-| `library_path`        | `/addon_config/calibre-library` | Where the Calibre library (`metadata.db` + book folders) lives.                                                          |
+| `library_path`        | `/addon_config/calibre-library` | Where the Calibre library (`metadata.db` + book folders) lives. With `books_path` set, it holds only `metadata.db`.      |
+| `books_path`          | _(empty)_                | Keep the book folders here, apart from `metadata.db`: e.g. on the NAS while the database stays on local storage. See "Books on the NAS, database local" below. |
+| `metadata_db_export`  | `false`                  | With `books_path` set, keep a read-only copy of `metadata.db` up to date in `books_path`, so that folder stays a complete Calibre library. See below. |
 | `ingest_path`         | `/addon_config/cwa-book-ingest`  | Drop EPUB/PDF/MOBI/etc. here for automatic ingest. Files are deleted after processing.                                   |
 | `config_path`         | _(empty)_                | **Deprecated.** CWA's `/config` (app database, user accounts, settings) now always lives on the add-on's local storage. If set, it is only used once, to import an existing config from that folder. See "Persistence" below. |
 | `plugins_path`        | `/addon_config/plugins`  | Calibre plugins folder. Drop plugin `.zip` files here and they are registered on start; an empty folder loads nothing. Clear the option to disable the bind mount. See "Plugins" below. |
@@ -79,6 +81,47 @@ ingest_path: /mnt/smb/cwa-book-ingest
 - The password is passed to the mount through a temporary file that is deleted right after, so it does not show up in the mount table or process list. It is stored in the add-on's options like any other add-on password; use a NAS account that can reach only this share.
 - `network_share_mode` is turned on automatically when `library_path` is on the share. If only `ingest_path` is, the add-on only switches the ingest watcher to polling (`CWA_WATCH_MODE=poll`), since inotify does not see files added to the share from other machines.
 - Paths under `/mnt/smb` are refused when `smb_share` is empty, since they would point into the container's throwaway filesystem.
+
+### Books on the NAS, database local
+
+A Calibre library is a folder of book folders plus one SQLite database, `metadata.db`. Putting the whole library on the NAS means running that database over the network, where SQLite's locking is unreliable and WAL has to be turned off (`network_share_mode`), which also makes it slower. `books_path` splits the two: the book files go on the NAS, `metadata.db` stays on the add-on's local storage, where it is fast, safe, and part of the add-on's backups. This uses CWA's own split library mode (Admin → Basic Configuration → "Separate book files from library"), which the add-on configures for you.
+
+```yaml
+smb_share: "//192.168.1.10/calibre"
+smb_username: "ha-calibre"
+smb_password: "…"
+library_path: /addon_config/calibre-library   # metadata.db only
+books_path: /mnt/smb/calibre-library          # the book folders
+metadata_db_export: true                      # optional, see below
+ingest_path: /mnt/smb/cwa-book-ingest
+```
+
+`books_path` can be any folder the add-on can reach (`/mnt/smb/...`, `/share/...` for NFS, `/media/...`). `books_path` must be a different folder from `library_path` and from `ingest_path`, neither inside the other.
+
+**Moving an existing library.** If your library already lives on the NAS (say `library_path: /mnt/smb/calibre-library`), set `books_path` to that folder and `library_path` back to `/addon_config/calibre-library`. Stop anything else that has the library open (Calibre desktop) first. On the first start with that `books_path`, the add-on:
+
+- copies `metadata.db` from `books_path` into `library_path`, replacing the empty library the add-on created there on its first start, if any;
+- renames the copy left on the NAS to `metadata.db.pre-split`, so it is not mistaken for the live database (an existing `.pre-split` file is never overwritten);
+- refuses to start, without changing anything, if both folders hold a library with books, since only you can tell which one is right. Rename or delete the one you don't want, then restart.
+
+It does this only once per `books_path`. If you later change only `library_path` (keeping `books_path`), the add-on moves `metadata.db` over from the previous `library_path` and renames the copy left there to `metadata.db.moved`; if the previous folder is gone, it restores the database from the `metadata_db_export` copy in `books_path`, if there is one. If the new `library_path` already holds a library with books while the old one does too, it refuses to start until you remove one.
+
+If your library is on local storage and you want to move only the books out to the NAS, stop the add-on, move every book folder (everything except `metadata.db`) into `books_path`, then set `books_path` and start it. The log warns if `library_path` still has book folders in it.
+
+How it behaves:
+
+- `network_share_mode` is not needed and is not turned on: the databases are all local, so SQLite keeps WAL. If the ingest folder is on the share, its watcher still switches to polling.
+- New books, conversions, cover and metadata edits all write their files to `books_path`, and only to `metadata.db` in `library_path`.
+- **The Calibre content server cannot run in split library mode.** CWA does not start it, and the add-on logs a warning if it is enabled.
+- **The add-on manages the setting.** While `books_path` is set, changes to the split library setting in CWA's admin page are put back on the next start.
+
+**`metadata_db_export`.** With `books_path` set, the NAS folder holds only the book files, so Calibre desktop cannot open it and a NAS backup of it has no database. Turn on `metadata_db_export` to have the add-on keep a copy of `metadata.db` there:
+
+- It is written after changes to the live database settle (about a minute after the last change; at least every 10 minutes while the library keeps changing), and once more when the add-on stops. The add-on allows up to 30 seconds to stop so that last copy can finish on a slow NAS. Each copy is a consistent snapshot, written beside the old one and then renamed over it, so a reader never sees a half-written file.
+- **It is a read-only copy.** It flows one way, from the add-on to the NAS. Anything Calibre desktop writes to it is replaced by the next export (the log warns when that happens). Make changes in CWA.
+- The add-on never reads it back while `books_path` stays the same, except to restore `metadata.db` if it has gone missing from `library_path` (the log says when the copy was last written).
+
+**Undoing it.** Stop the add-on (with `metadata_db_export` on, that writes a final, current copy into `books_path`; without it, copy `metadata.db` from `library_path` into `books_path` yourself). Then clear `books_path`, set `library_path` to the books folder, and start the add-on. Once `books_path` is cleared, the add-on turns split library mode off again.
 
 ## Plugins
 
@@ -223,7 +266,7 @@ Earlier versions could keep this on a share via `config_path`, and shipped with 
 
 A Home Assistant backup of this add-on contains exactly two folders: its `/data` (CWA's app database, users, settings, Tailscale state) and its config folder `/addon_config` (by default the library, ingest and plugins folders). Nothing else is in it:
 
-- **Paths on the SMB share** (`/mnt/smb/...`) live on your NAS; back them up there.
+- **Paths on the SMB share** (`/mnt/smb/...`) live on your NAS; back them up there. With `books_path` on the NAS and `library_path` in `/addon_config`, the add-on's backups hold the library's `metadata.db` and the NAS holds the books; turn on `metadata_db_export` to also keep a copy of the database with the books.
 - **Paths under `/share` or `/media`** are only in full Home Assistant backups (or partial ones with the Share/Media folder ticked), never in the add-on's own backup, including the one Home Assistant takes automatically before an add-on update. The add-on logs a warning at startup for every path option outside `/addon_config`, `/data` and `/mnt/smb`.
 
 Keeping the library in `/addon_config` means it is copied into every backup of the add-on, including those automatic pre-update ones. That is the point, but with a large library it makes those backups large and slower.

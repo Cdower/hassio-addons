@@ -78,6 +78,21 @@ corresponding add-on code/tests must be updated:
   `/data` and `/addon_config` (`backup_pre`). A new database with another
   extension (`grep -rhoE "/config/[A-Za-z0-9_./-]*\.(db|sqlite[0-9]?)" cps
   scripts root`) would be backed up torn — extend the script if one appears.
+- Split library mode (`books_path` / `metadata_db_export`,
+  `rootfs/opt/cwa-split-library/`): the add-on writes `config_calibre_split`
+  and `config_calibre_split_dir` into app.db's `settings` and relies on
+  upstream honouring them everywhere book files are touched. Check:
+  `grep -n "config_calibre_split" cps/config_sql.py` (columns and
+  `get_book_path()`), `grep -n "CALIBRE_OVERRIDE_DATABASE_PATH\|split_library" scripts/ingest_processor.py`
+  (ingest hands Calibre the local metadata.db and writes files to the split
+  dir), and `grep -rLn "split\|get_book_path\|OVERRIDE_DATABASE" $(grep -rl "metadata.db\|calibre_library_dir" scripts cps/tasks cps/services)`
+  for new code that reads book files from the library dir without it. Also
+  that `scripts/auto_library.py` still only looks for metadata.db under
+  `/calibre-library` (it must not adopt the exported copy in `/calibre-books`),
+  that the oneshot is still called `cwa-auto-library` (our
+  `init-cwa-split-library` depends on it), and how `cps/content_server.py`
+  handles split mode (`grep -n split cps/content_server.py`; the add-on only
+  warns).
 - `/lsiopy` venv still exists and ships `cryptography` + `werkzeug`
   (`grep -n lsiopy Dockerfile`, `grep -in "cryptography\|werkzeug" pyproject.toml`
   in the upstream clone) — the Dockerfile pip-installs PyJWT into it and

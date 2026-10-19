@@ -35,11 +35,17 @@ map:
 privileged:
   - SYS_ADMIN
   - DAC_READ_SEARCH
+# Seconds Home Assistant waits for the add-on to stop before killing it
+# (default 10). The stop has to fit CWA shutting down and then
+# metadata_db_export's final copy of metadata.db to the NAS; s6's own budget
+# for that is S6_SERVICES_GRACETIME in the Dockerfile.
+timeout: 30
 image: ghcr.io/cdower/{arch}-hassio-addon-calibre-web-automated
 options:
   library_path: /addon_config/calibre-library
   ingest_path: /addon_config/cwa-book-ingest
   plugins_path: /addon_config/plugins
+  metadata_db_export: false
   network_share_mode: false
   hardcover_token: ""
   trusted_proxy_count: 1
@@ -54,6 +60,8 @@ options:
   tailscale_extra_args: ""
 schema:
   library_path: str
+  books_path: str?
+  metadata_db_export: bool
   ingest_path: str
   config_path: str?
   plugins_path: str?
