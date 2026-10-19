@@ -119,7 +119,7 @@ How it behaves:
 
 - It is written after changes to the live database settle (about a minute after the last change; at least every 10 minutes while the library keeps changing), and once more when the add-on stops. The add-on allows up to 30 seconds to stop so that last copy can finish on a slow NAS. Each copy is a consistent snapshot, written beside the old one and then renamed over it, so a reader never sees a half-written file.
 - **It is a read-only copy.** It flows one way, from the add-on to the NAS. Anything Calibre desktop writes to it is replaced by the next export (the log warns when that happens). Make changes in CWA.
-- The add-on never reads it back while `books_path` stays the same.
+- The add-on never reads it back while `books_path` stays the same, except to restore `metadata.db` if it has gone missing from `library_path` (the log says when the copy was last written).
 
 **Undoing it.** Stop the add-on (with `metadata_db_export` on, that writes a final, current copy into `books_path`; without it, copy `metadata.db` from `library_path` into `books_path` yourself). Then clear `books_path`, set `library_path` to the books folder, and start the add-on. Once `books_path` is cleared, the add-on turns split library mode off again.
 

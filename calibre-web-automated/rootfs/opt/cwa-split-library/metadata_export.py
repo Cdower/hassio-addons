@@ -226,9 +226,20 @@ def main(argv=None):
     parser.add_argument("--tmp-dir", default=None)
     args = parser.parse_args(argv)
 
+    # Take SIGTERM/SIGINT in a thread of their own rather than in a signal
+    # handler: Event.set() takes the Event's non-reentrant lock, which the
+    # main thread briefly holds inside stop.wait(), so setting it from a
+    # handler can deadlock -- and s6 would then kill the process without the
+    # final export.
     stop = threading.Event()
-    signal.signal(signal.SIGTERM, lambda *_: stop.set())
-    signal.signal(signal.SIGINT, lambda *_: stop.set())
+    stop_signals = {signal.SIGTERM, signal.SIGINT}
+    signal.pthread_sigmask(signal.SIG_BLOCK, stop_signals)
+
+    def wait_for_stop_signal():
+        signal.sigwait(stop_signals)
+        stop.set()
+
+    threading.Thread(target=wait_for_stop_signal, daemon=True).start()
 
     log(f"exporting {args.source} to {args.target_dir} after each change "
         f"(checked every {args.interval:g}s)")

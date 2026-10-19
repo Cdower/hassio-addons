@@ -321,8 +321,8 @@ chown_if_root "${APP_UID}:${APP_GID}" "${ADDON_CONFIG}"
 # switch split library mode back off once books_path is cleared.
 SPLIT_STATE=/data/.cwa-split-library
 if bashio::var.has_value "${BOOKS_PATH}"; then
+    # Owners are set by bind_user_path below; prepare runs as root.
     mkdir -p "${LIBRARY_PATH}" "${BOOKS_PATH}"
-    chown_if_root "${APP_UID}:${APP_GID}" "${LIBRARY_PATH}" "${BOOKS_PATH}"
     if ! /lsiopy/bin/python3 /opt/cwa-split-library/split_library.py prepare \
             --library "${LIBRARY_PATH}" --books "${BOOKS_PATH}" \
             --state "${SPLIT_STATE}"; then

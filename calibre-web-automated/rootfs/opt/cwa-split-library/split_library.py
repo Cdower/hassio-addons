@@ -16,7 +16,9 @@
 #            since then, bring the database over from the previous
 #            library_path instead (or, if that is gone, from the
 #            metadata_db_export copy in books_path). Records both paths in
-#            the state file; later starts with the same paths do nothing.
+#            the state file; later starts with the same paths do nothing,
+#            unless the live metadata.db has gone missing, in which case it
+#            is restored from the metadata_db_export copy.
 #   enable   (init-cwa-split-library, after cwa-auto-library has created
 #            app.db) turn split library mode on, pointing it at BOOKS_DIR.
 #   disable  turn split library mode off again.
@@ -36,6 +38,7 @@ import pathlib
 import shutil
 import sqlite3
 import sys
+import time
 
 DEFAULT_DB = "/config/app.db"
 METADATA_DB = "metadata.db"
@@ -190,8 +193,26 @@ def install(staged, local, local_books, uid, gid):
     if local_books == 0:
         log(f"replacing the empty library in {local}")
         set_aside(local)
+    # A -wal or -journal left beside a missing (or set-aside) database would
+    # be applied to the new one by the next opener.
+    for side in SIDE_FILES:
+        remove(local + side)
     os.replace(staged, local)
     chown(local, uid, gid)
+
+
+def restore_export(local, local_books, shared, staging, uid, gid, why):
+    """Install the metadata_db_export copy in books_path as the live
+    database. Its age is logged: the copy may be stale if the export was
+    turned off at some point."""
+    written = time.strftime(
+        "%Y-%m-%d %H:%M", time.localtime(os.path.getmtime(shared)))
+    staged, shared_books = stage_or_fail(shared, staging)
+    install(staged, local, local_books, uid, gid)
+    log(f"{why}: restored the library database from the metadata_db_export "
+        f"copy {shared} ({shared_books} books, last written {written}). "
+        "Changes made after that time are not in it.")
+    return "restored-export"
 
 
 def first_setup(local, local_books, shared, staging, uid, gid):
@@ -251,12 +272,9 @@ def library_moved(previous_dir, local, local_books, shared, staging, uid, gid):
                 "is no longer used")
         return "moved"
     if os.path.exists(shared):
-        staged, shared_books = stage_or_fail(shared, staging)
-        install(staged, local, local_books, uid, gid)
-        log(f"library_path changed and {previous} is gone: restored the "
-            f"library database from the metadata_db_export copy {shared} "
-            f"({shared_books} books)")
-        return "restored-export"
+        return restore_export(
+            local, local_books, shared, staging, uid, gid,
+            f"library_path changed and {previous} is gone")
     if local_books is None:
         log(f"WARNING: library_path changed from {previous_dir}, but there is "
             f"no {METADATA_DB} there or in books_path: CWA starts a new, "
@@ -270,16 +288,25 @@ def prepare(library_dir, books_dir, state_path, uid=1000, gid=1000):
     library_dir = os.path.normpath(library_dir)
     books_dir = os.path.normpath(books_dir)
     state = read_state(state_path)
-    if state == (library_dir, books_dir):
-        return "unchanged"
-
     local = os.path.join(library_dir, METADATA_DB)
     shared = os.path.join(books_dir, METADATA_DB)
+    unchanged = state == (library_dir, books_dir)
+    # Same paths as last time: nothing to do while the live database is
+    # there. If it has gone missing, cwa-auto-library would start a new,
+    # empty library and metadata_db_export would copy that over the only
+    # other copy, so restore from that copy first.
+    if unchanged and (os.path.exists(local) or not os.path.exists(shared)):
+        return "unchanged"
+
     staging = os.path.join(library_dir, STAGING_NAME)
     shutil.rmtree(staging, ignore_errors=True)
     try:
         local_books = count_books(local) if os.path.exists(local) else None
-        if state is not None and state[1] == books_dir:
+        if unchanged:
+            outcome = restore_export(
+                local, local_books, shared, staging, uid, gid,
+                f"{local} is missing")
+        elif state is not None and state[1] == books_dir:
             outcome = library_moved(
                 state[0], local, local_books, shared, staging, uid, gid)
         else:
@@ -289,9 +316,10 @@ def prepare(library_dir, books_dir, state_path, uid=1000, gid=1000):
                     f"and {library_dir} has none either: CWA starts a new, "
                     "empty library. Put the library's metadata.db in "
                     "library_path to use the books already there.")
-        if outcome == "kept-local" and book_folders(library_dir):
+        stray = book_folders(library_dir) if outcome == "kept-local" else []
+        if stray:
             log(f"WARNING: {library_dir} still has folders "
-                f"({', '.join(book_folders(library_dir)[:3])}, ...). With "
+                f"({', '.join(stray[:3])}, ...). With "
                 "books_path set, CWA looks for book files only in "
                 f"{books_dir}: move the book folders there.")
     finally:

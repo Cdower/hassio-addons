@@ -125,6 +125,20 @@ class PrepareTest(unittest.TestCase):
         self.assertEqual(titles(self.local), ["Dune"])
         self.assertEqual(titles(self.shared), ["Emma"])
 
+    def test_missing_live_database_is_restored_from_export(self):
+        make_library(self.shared, ["Dune"]).close()
+        self.prepare()
+        make_library(self.shared, ["Dune", "Emma"]).close()  # the export copy
+        os.remove(self.local)
+        # A stale -wal beside the missing database must not be applied.
+        with open(self.local + "-wal", "wb") as fh:
+            fh.write(b"\x00" * 64)
+        self.assertEqual(self.prepare(), "restored-export")
+        self.assertEqual(titles(self.local), ["Dune", "Emma"])
+        self.assertFalse(os.path.exists(self.local + "-wal"))
+        self.assertIn("is missing", self.out.getvalue())
+        self.assertEqual(self.prepare(), "unchanged")
+
     def test_trailing_slash_counts_as_same_books_path(self):
         self.prepare()
         with self.quiet:
