@@ -19,17 +19,22 @@ ports_description:
     Cloudflare Access entry point (JWT-validated). Leave unmapped — the
     cloudflared add-on reaches it over the internal docker network.
 map:
-  - share:rw
-  - media:rw
+  - type: share
+    read_only: false
+  - type: media
+    read_only: false
+  # Mounted at /addon_config because CWA itself uses /config. Part of the
+  # add-on's backups; holds the shipped library, ingest and plugins folders.
+  - type: addon_config
+    read_only: false
+    path: /addon_config
 privileged:
   - SYS_ADMIN
-apparmor: false
 image: ghcr.io/cdower/{arch}-hassio-addon-calibre-web-automated
 options:
-  library_path: /share/calibre/calibre-library
-  ingest_path: /share/calibre/cwa-book-ingest
-  config_path: /share/calibre/config
-  plugins_path: /share/calibre/plugins
+  library_path: /addon_config/calibre-library
+  ingest_path: /addon_config/cwa-book-ingest
+  plugins_path: /addon_config/plugins
   network_share_mode: false
   hardcover_token: ""
   trusted_proxy_count: 1
@@ -47,6 +52,12 @@ schema:
   ingest_path: str
   config_path: str?
   plugins_path: str?
+  metadata_providers_path: str?
+  smb_share: match(^//[^/]+/[^/].*$)?
+  smb_username: str?
+  smb_password: password?
+  smb_domain: str?
+  smb_version: list(3.1.1|3.0|2.1)?
   network_share_mode: bool
   hardcover_token: password?
   trusted_proxy_count: int(1,10)
@@ -60,6 +71,13 @@ schema:
   tailscale_serve: bool
   tailscale_funnel: bool
   tailscale_extra_args: str?
+# Backups run while CWA keeps running. backup_pre snapshots every SQLite
+# database in /data and /addon_config with SQLite's backup API; on start after
+# a restore those snapshots replace the possibly torn live files. See
+# rootfs/opt/cwa-backup/db_snapshot.py.
+backup_pre: /lsiopy/bin/python3 /opt/cwa-backup/db_snapshot.py create
+backup_post: /lsiopy/bin/python3 /opt/cwa-backup/db_snapshot.py discard
 backup_exclude:
   - "*/cwa.log"
   - "*/processed_books/*"
+  - "*.cwa-snapshot.tmp"

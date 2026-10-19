@@ -71,6 +71,16 @@ RUN \
     && rm -rf /var/lib/apt/lists/* /etc/nginx/sites-enabled/default \
     && /lsiopy/bin/pip install --no-cache-dir "PyJWT==${PYJWT_VERSION}"
 
+# cifs-utils provides mount.cifs for the optional `smb_share` option: the
+# add-on mounts the share itself so it can choose the files' owner (Home
+# Assistant's Network Storage mounts CIFS as root-only-writable). The mount is
+# permitted by the add-on's AppArmor profile (apparmor.txt).
+# hadolint ignore=DL3008
+RUN \
+    apt-get update \
+    && apt-get install -y --no-install-recommends cifs-utils \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install Tailscale. Userspace networking mode (set via the s6 run script)
 # means no /dev/net/tun, NET_ADMIN, or NET_RAW required — tailscaled runs as
 # a userspace SOCKS/HTTP proxy and `tailscale serve` exposes localhost:8083
