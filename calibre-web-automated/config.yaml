@@ -1,6 +1,6 @@
 ---
 name: Calibre-Web Automated
-version: "4.1.48.0"
+version: "4.1.48.1"
 # version: "dev"
 slug: calibre-web-automated
 description: Self-hosted ebook library with automatic ingest, conversion, and metadata
@@ -28,8 +28,13 @@ map:
   - type: addon_config
     read_only: false
     path: /addon_config
+# SYS_ADMIN makes the mounts in init-cwa-paths. DAC_READ_SEARCH is only for
+# mount.cifs (`smb_share`): it puts the capability back into its own set while
+# dropping privileges, which fails if the container was never given it.
+# apparmor.txt denies actually using it.
 privileged:
   - SYS_ADMIN
+  - DAC_READ_SEARCH
 # Seconds Home Assistant waits for the add-on to stop before killing it
 # (default 10). The stop has to fit CWA shutting down and then
 # metadata_db_export's final copy of metadata.db to the NAS; s6's own budget

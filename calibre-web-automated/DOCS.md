@@ -288,7 +288,9 @@ If the add-on was stopped when the backup was taken, Home Assistant skips `backu
 
 ## Security
 
-The add-on needs the `SYS_ADMIN` capability to bind-mount your chosen paths over the base image's volumes and to mount `smb_share`. Instead of turning AppArmor off for that, it ships its own AppArmor profile (`apparmor.txt`): Docker's default container profile plus permission for exactly those mounts. Home Assistant should rate the add-on's security 5 out of 8 — one point off for `SYS_ADMIN`, one point back for the custom profile.
+The add-on needs the `SYS_ADMIN` capability to bind-mount your chosen paths over the base image's volumes and to mount `smb_share`. Instead of turning AppArmor off for that, it ships its own AppArmor profile (`apparmor.txt`): Docker's default container profile plus permission for exactly those mounts. Home Assistant should rate the add-on's security 5 out of 8 — one point off for its capabilities, one point back for the custom profile.
+
+It also holds `DAC_READ_SEARCH`, only because `mount.cifs` refuses to run without it: while dropping privileges it puts that capability back into its own set, which fails with `Unable to apply new capability set` if the container was never given it. Nothing in the add-on uses it, and the AppArmor profile denies its use, which keeps `open_by_handle_at` (the call behind the "Shocker" container escape) refused just as under Docker's defaults. That protection comes from AppArmor alone: holding the capability also lifts Docker's default seccomp block on `open_by_handle_at`, so on a host where AppArmor is unavailable (Home Assistant then runs add-ons without their profiles) nothing refuses it.
 
 ## Base image
 

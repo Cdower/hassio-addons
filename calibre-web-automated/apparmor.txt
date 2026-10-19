@@ -7,11 +7,12 @@
 # (unconfined), which the add-on needed only to bind-mount its storage.
 #
 # The base is Docker's default container profile (docker-default), which is
-# what a container gets with no profile of its own. The only addition is a
-# small set of mount rules: the add-on's init script bind-mounts the configured
-# paths over the image's volumes and, when `smb_share` is set, mounts that
-# share itself (rootfs/etc/s6-overlay/scripts/init-cwa-paths). Every other
-# mount stays denied, just as under docker-default.
+# what a container gets with no profile of its own. It adds a small set of
+# mount rules: the add-on's init script bind-mounts the configured paths over
+# the image's volumes and, when `smb_share` is set, mounts that share itself
+# (rootfs/etc/s6-overlay/scripts/init-cwa-paths). Every other mount stays
+# denied, just as under docker-default. It also denies the use of
+# DAC_READ_SEARCH, which config.yaml grants only for mount.cifs (see below).
 #
 # The signal and ptrace rules carry no peer: the Supervisor renames only the
 # `profile` line, so a peer naming this profile would not match the loaded
@@ -22,6 +23,11 @@ profile calibre-web-automated flags=(attach_disconnected,mediate_deleted) {
 
   network,
   capability,
+  # DAC_READ_SEARCH is granted (config.yaml) only so mount.cifs can put it
+  # into its capability sets while dropping privileges; nothing here needs to
+  # use it. Denying its use keeps open_by_handle_at -- the "Shocker" escape
+  # from a container that holds it -- refused, as under Docker's defaults.
+  deny capability dac_read_search,
   file,
   umount,
   signal (send, receive),
