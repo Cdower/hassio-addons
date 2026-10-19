@@ -65,6 +65,18 @@ add-on's `config.yaml`; the optional `version` input overrides it, and the
 optional `ref` input builds a specific tag or commit rather than the default
 branch.
 
+## Letting the Bump workflow open its PR
+
+By default GitHub does not let `GITHUB_TOKEN` open pull requests. Either:
+
+- enable **Settings → Actions → General → Workflow permissions → Allow
+  GitHub Actions to create and approve pull requests**, or
+- add the `BUMP_TOKEN` secret described below.
+
+With neither, the workflow still pushes the bump branch and starts CI on it,
+then finishes with a warning and a link in the job summary that opens the PR
+with its title and body already filled in.
+
 ## CI on bump PRs
 
 Merging needs the required `CI` check, and a branch pushed with the default
