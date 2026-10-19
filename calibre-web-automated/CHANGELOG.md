@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Saving the configuration failed with `Missing option 'metadata_db_export' in root` on an install that predates that option. Home Assistant validates the whole saved options set against the add-on's schema but never adds a newly introduced option to an existing install's options, so a required new option makes the configuration page unsaveable until the option is typed in by hand in YAML mode. `metadata_db_export`, `tailscale_serve` and `tailscale_funnel` are optional in the schema now (they were the only options this add-on added as required ones after its first release), and a test keeps it that way. `tailscale_serve` still defaults to `true` when it is missing from an install's options, as documented.
+
 ### Added
 
 - `books_path` option: keep the book folders on the NAS while `metadata.db` stays on the add-on's local storage. It uses CWA's own split library mode, which the add-on now configures: `library_path` holds only `metadata.db`, and new books, conversions and edits write their files to `books_path`. SQLite then never runs over the network, so WAL stays on and `metadata.db` is part of the add-on's backups. On the first start with a new `books_path`, the add-on moves an existing `metadata.db` from that folder into `library_path` and renames the one left behind to `metadata.db.pre-split`; it refuses to start if both folders already hold a library with books. Changing only `library_path` later moves `metadata.db` over from the previous one (or, if that folder is gone, restores it from the `metadata_db_export` copy), instead of starting an empty library. Clearing `books_path` turns split library mode off again. The Calibre content server does not support split library mode.

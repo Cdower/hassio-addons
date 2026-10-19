@@ -58,10 +58,19 @@ options:
   tailscale_serve: true
   tailscale_funnel: false
   tailscale_extra_args: ""
+# An option added after the add-on's first release has to be optional ("?"),
+# booleans included. The Supervisor validates the whole stored options dict on
+# every save and refuses one that is missing a non-optional option, but it
+# never adds a new option to an existing install's options.json -- so a
+# required option added later makes the config page unsaveable ("Missing
+# option '<name>' in root ...") until the option is typed in by hand in YAML
+# mode. Scripts reading an option that may be absent supply its default
+# (`bashio::config` prints "null" for it); `bashio::config.true` already reads
+# a missing option as false.
 schema:
   library_path: str
   books_path: str?
-  metadata_db_export: bool
+  metadata_db_export: bool?
   ingest_path: str
   config_path: str?
   plugins_path: str?
@@ -81,8 +90,8 @@ schema:
     - email
   tailscale_authkey: password?
   tailscale_hostname: str?
-  tailscale_serve: bool
-  tailscale_funnel: bool
+  tailscale_serve: bool?
+  tailscale_funnel: bool?
   tailscale_extra_args: str?
 # Backups run while CWA keeps running. backup_pre snapshots every SQLite
 # database in /data and /addon_config with SQLite's backup API; on start after

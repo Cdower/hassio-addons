@@ -12,6 +12,21 @@
 SOCK=/var/run/tailscale/tailscaled.sock
 TS=/opt/tailscale/tailscale
 
+# True when boolean option $1 is on, reading a missing option as default $2.
+# `tailscale_serve` and `tailscale_funnel` are optional in config.yaml (see the
+# comment above its schema), so they can be absent from the stored options of
+# an install older than they are, and `bashio::config` then prints "null" --
+# which `bashio::config.true` reads as false, the wrong default for
+# `tailscale_serve`.
+config_bool() {
+    local value
+    value=$(bashio::config "$1")
+    if [ "${value}" = "null" ]; then
+        value=$2
+    fi
+    [ "${value}" = "true" ]
+}
+
 # Wait up to 30s for tailscaled's control socket. The longrun starts in
 # parallel with this oneshot under s6-rc; in practice the socket is ready
 # within ~1s. Returns 0 if found, 1 on timeout.
@@ -36,8 +51,8 @@ apply_serve_state() {
     # call when nothing was configured.
     "${TS}" --socket="${SOCK}" serve reset 2>/dev/null || true
 
-    if ! bashio::config.true 'tailscale_serve'; then
-        if bashio::config.true 'tailscale_funnel'; then
+    if ! config_bool 'tailscale_serve' true; then
+        if config_bool 'tailscale_funnel' false; then
             bashio::log.warning "tailscale_funnel is true but tailscale_serve is false — Funnel requires serve. Disabling both."
         fi
         return 0
@@ -49,7 +64,7 @@ apply_serve_state() {
         return 1
     fi
 
-    if bashio::config.true 'tailscale_funnel'; then
+    if config_bool 'tailscale_funnel' false; then
         bashio::log.info "Enabling Tailscale Funnel on :443 (public)"
         if ! "${TS}" --socket="${SOCK}" funnel --bg 443 on; then
             bashio::log.error "tailscale funnel failed (is Funnel enabled for the tailnet?)"
