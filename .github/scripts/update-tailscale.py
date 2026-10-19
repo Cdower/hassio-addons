@@ -92,6 +92,3 @@ else:
 
 with open(changelog, "w", encoding="utf-8") as handle:
     handle.write("\n".join(lines).rstrip("\n") + "\n")
-
-with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
-    handle.write(f"previous={previous}\n")
