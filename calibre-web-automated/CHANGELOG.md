@@ -5,6 +5,14 @@ All notable changes to this add-on will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.48.0] - 2026-10-19
+
+### Changed
+
+- Updated the base image from Calibre-Web NextGen v4.1.40 to [v4.1.48](https://github.com/new-usemame/calibre-web-nextgen/blob/v4.1.48/CHANGELOG.md). Upstream highlights include per-user "My Library" mode, per-device book scope for Kobo and KOReader, hierarchical tag browsing, bulk editing in the table view and a Catalan translation. Upstream now only believes `X-Forwarded-*` headers from loopback, private networks and Tailscale (`TRUSTED_PROXY_NETWORKS`); the add-on's own nginx front, Home Assistant's network and the cloudflared add-on all fall inside that default, so no change is needed.
+- The CWA server override (`svc-calibre-web-automated/run`) was re-applied on top of upstream's new version, which also clears `PYTHONPATH` and user site-packages before starting the app. The `-i $CWA_BIND_ADDRESS` loopback pin for Cloudflare Access mode is unchanged.
+- Accounts created for `access_users` now match upstream's defaults for new users: Kobo sync sends only selected shelves (`kobo_only_shelves_sync = 1`), and the instance's default UI fonts are copied onto the account.
+
 ## [4.1.40.2] - 2026-10-19
 
 ### Added

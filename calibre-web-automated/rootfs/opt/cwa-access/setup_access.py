@@ -38,6 +38,13 @@ REQUIRED_SETTINGS_COLS = {
     "config_allow_reverse_proxy_header_login",
     "config_reverse_proxy_login_header_name",
 }
+# Instance UI-font defaults copied onto new accounts, with upstream's
+# allowlist (cps/ui_font_preferences.py); anything else degrades to "".
+UI_FONT_DEFAULTS = {
+    "ui_font_body": "config_default_ui_font_body",
+    "ui_font_display": "config_default_ui_font_display",
+}
+UI_FONT_ALLOWED = frozenset({"", "system-sans", "serif", "mono"})
 
 
 def log(msg):
@@ -87,7 +94,7 @@ def create_users(con, emails):
             continue
 
         # Mirror upstream create_authenticated_user() defaults
-        # (cps/usermanagement.py @ v4.0.6).
+        # (cps/usermanagement.py @ calibre-web-nextgen v4.1.48).
         row = {
             "name": email,
             "email": email,
@@ -107,7 +114,7 @@ def create_users(con, emails):
             ("kindle_mail", ""),
             ("kindle_mail_subject", ""),
             ("view_settings", "{}"),
-            ("kobo_only_shelves_sync", 0),
+            ("kobo_only_shelves_sync", 1),
             ("opds_only_shelves_sync", 0),
             ("theme", 1),
             ("hardcover_token", ""),
@@ -116,6 +123,10 @@ def create_users(con, emails):
         ):
             if col in user_cols:
                 row[col] = val
+        for col, setting in UI_FONT_DEFAULTS.items():
+            if col in user_cols:
+                val = settings.get(setting)
+                row[col] = val if val in UI_FONT_ALLOWED else ""
 
         columns = ", ".join(row)
         placeholders = ", ".join(f":{k}" for k in row)
