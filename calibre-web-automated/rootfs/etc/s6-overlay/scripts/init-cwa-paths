@@ -42,6 +42,11 @@ PATH_OPTIONS=(
 # it to use the share.
 SMB_MOUNT_POINT=/mnt/smb
 
+# True when path $1 is on the mounted smb_share.
+on_smb_share() {
+    bashio::var.has_value "${SMB_SHARE}" && path_under "${SMB_MOUNT_POINT}" "$1"
+}
+
 # Match the LSIO base's PUID/PGID (set in the Dockerfile) so directories we
 # mkdir as root are usable by `abc` after it's remapped.
 APP_UID=${PUID:-1000}
@@ -315,6 +320,56 @@ if ! bashio::fs.file_exists "${CWA_CONFIG_TARGET}/.cwa-initialized"; then
 fi
 bind_user_path "${CWA_CONFIG_TARGET}" /config
 
+# Surface options as env vars for downstream s6-rc longruns. The /run/s6/container_environment
+# directory is read by `with-contenv` for every service started after this oneshot.
+mkdir -p /run/s6/container_environment
+# On the SMB share, SQLite WAL corrupts and inotify misses files added from
+# other machines. network_share_mode handles both, so turn it on when a
+# database folder is on the share; /config always lives in /data, so that is
+# only ever the library. If only the ingest folder is there, just switch the
+# watchers to polling and keep WAL for the local databases.
+NETWORK_SHARE_MODE=$(bashio::config 'network_share_mode')
+if [ "${NETWORK_SHARE_MODE}" != "true" ]; then
+    if on_smb_share "${LIBRARY_PATH}"; then
+        bashio::log.info "library_path is on smb_share; enabling network_share_mode"
+        NETWORK_SHARE_MODE=true
+    elif on_smb_share "${INGEST_PATH}"; then
+        bashio::log.info "ingest_path is on smb_share; watching it by polling"
+        echo -n "poll" > /run/s6/container_environment/CWA_WATCH_MODE
+    fi
+fi
+
+# Upstream cwa-init runs `chown -R abc:abc /config` on every boot, except
+# under NETWORK_SHARE_MODE, where it skips it entirely. That leaves state
+# written under a different uid unwritable for `abc` -- most commonly an
+# app.db from the v4.0.6-based add-on, which ran as 911 before the image
+# pinned PUID=1000, copied into /data by hand (the config import above
+# re-owns what it copies) -- and CWA then dies on its first migration with
+# "attempt to write a readonly database". Re-own only what doesn't already
+# belong to APP_UID, so a correctly-owned /config costs one traversal and no
+# writes. options.json (rewritten as root by the Supervisor on every start,
+# and holding smb_password and tailscale_authkey) and tailscaled's state
+# (root's tailnet node key) are not CWA's and stay root-only. Runs before
+# plugins_path is bind-mounted under /config, and -xdev keeps it off any other
+# filesystem. Failures warn instead of aborting startup.
+if [ "${NETWORK_SHARE_MODE}" = "true" ]; then
+    if ! reown_err=$(find /config -xdev \
+            \( -path /config/options.json -o -path /config/tailscaled \) -prune \
+            -o \( ! -uid "${APP_UID}" -o ! -gid "${APP_GID}" \) \
+            -exec chown -h "${APP_UID}:${APP_GID}" {} + 2>&1 >/dev/null); then
+        bashio::log.warning \
+            "Could not re-own everything under ${CWA_CONFIG_TARGET} to ${APP_UID}:${APP_GID}: $(head -n 3 <<< "${reown_err}")"
+    fi
+    # Name the real cause up front rather than leave it to a SQLAlchemy
+    # traceback. Tested as APP_UID, not by owner, so mode bits count too.
+    if [ -e /config/app.db ] \
+            && ! /command/s6-applyuidgid -u "${APP_UID}" -g "${APP_GID}" -G "" \
+                test -w /config/app.db; then
+        bashio::log.error \
+            "${CWA_CONFIG_TARGET}/app.db (owner uid $(stat -c %u /config/app.db)) is not writable by uid ${APP_UID}; CWA will fail to start."
+    fi
+fi
+
 bind_user_path "${LIBRARY_PATH}" /calibre-library
 bind_user_path "${INGEST_PATH}" /cwa-book-ingest
 
@@ -341,27 +396,6 @@ if bashio::var.has_value "${PLUGINS_PATH}"; then
     fi
 fi
 
-# Surface options as env vars for downstream s6-rc longruns. The /run/s6/container_environment
-# directory is read by `with-contenv` for every service started after this oneshot.
-mkdir -p /run/s6/container_environment
-# On the SMB share, SQLite WAL corrupts and inotify misses files added from
-# other machines. network_share_mode handles both, so turn it on when a
-# database folder is on the share; /config always lives in /data, so that is
-# only ever the library. If only the ingest folder is there, just switch the
-# watchers to polling and keep WAL for the local databases.
-on_smb_share() {
-    bashio::var.has_value "${SMB_SHARE}" && path_under "${SMB_MOUNT_POINT}" "$1"
-}
-NETWORK_SHARE_MODE=$(bashio::config 'network_share_mode')
-if [ "${NETWORK_SHARE_MODE}" != "true" ]; then
-    if on_smb_share "${LIBRARY_PATH}"; then
-        bashio::log.info "library_path is on smb_share; enabling network_share_mode"
-        NETWORK_SHARE_MODE=true
-    elif on_smb_share "${INGEST_PATH}"; then
-        bashio::log.info "ingest_path is on smb_share; watching it by polling"
-        echo -n "poll" > /run/s6/container_environment/CWA_WATCH_MODE
-    fi
-fi
 echo -n "${NETWORK_SHARE_MODE}" > /run/s6/container_environment/NETWORK_SHARE_MODE
 # Read by init-cwa-metadata-providers.
 echo -n "${PROVIDERS_PATH}" > /run/s6/container_environment/CWA_METADATA_PROVIDERS_PATH
