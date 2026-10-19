@@ -18,6 +18,15 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ENV PUID=1000 \
     PGID=1000
 
+# How long s6 waits at shutdown for the services to stop (default 5000 ms)
+# before signalling whatever is left and, S6_KILL_GRACETIME (3000 ms) later,
+# killing it. CWA stops first and the metadata_db_export exporter last, with a
+# final copy of metadata.db to the NAS that a slow share or a large library
+# can stretch past 5 s. Leaves room under config.yaml's `timeout: 30`, the
+# Supervisor's own limit for the whole stop. Services that stop sooner are
+# not held up by it.
+ENV S6_SERVICES_GRACETIME=25000
+
 # Opt in to user-installed Calibre plugins, which is what makes the add-on's
 # `plugins_path` option actually work.
 #

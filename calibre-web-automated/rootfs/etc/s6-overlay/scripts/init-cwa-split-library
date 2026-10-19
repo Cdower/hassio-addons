@@ -21,11 +21,11 @@ if [ "${CWA_SPLIT_LIBRARY}" = "true" ]; then
         bashio::exit.nok "Could not enable split library mode for books_path (see above)"
     fi
 elif [ -f "${STATE}" ]; then
-    old_books=$(cat "${STATE}")
+    old_books=$(jq -r '.books // empty' "${STATE}" 2>/dev/null)
     bashio::log.info "books_path cleared — turning split library mode back off"
     if s6-setuidgid abc /lsiopy/bin/python3 "${SPLIT}" disable; then
         rm -f "${STATE}"
-        bashio::log.warning "CWA now expects the book files next to metadata.db in library_path. If they are still in ${old_books}, stop the add-on, copy metadata.db there and set library_path to that folder (or set books_path again)."
+        bashio::log.warning "CWA now expects the book files next to metadata.db in library_path. If they are still in ${old_books:-the old books_path}, stop the add-on, copy metadata.db there and set library_path to that folder (or set books_path again)."
     else
         bashio::log.warning "Could not turn split library mode off; will retry on next start"
     fi

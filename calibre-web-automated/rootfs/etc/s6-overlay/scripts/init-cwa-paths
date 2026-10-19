@@ -312,11 +312,13 @@ mkdir -p "${ADDON_CONFIG}"
 chown_if_root "${APP_UID}:${APP_GID}" "${ADDON_CONFIG}"
 
 # With books_path set, bring over the library's metadata.db the first time
-# that books_path is used (see split_library.py `prepare`). This must run
-# before cwa-init: cwa-auto-library would otherwise find no metadata.db in
-# library_path and start a new, empty library there. The state file records
-# which books_path has been set up; init-cwa-split-library uses it to switch
-# split library mode back off once books_path is cleared.
+# that books_path is used, or from the previous library_path when only that
+# changed (see split_library.py `prepare`). This must run before cwa-init:
+# cwa-auto-library would otherwise find no metadata.db in library_path and
+# start a new, empty library there -- which metadata_db_export would then copy
+# over the real database's copy in books_path. The state file records the
+# library_path and books_path set up last; init-cwa-split-library uses it to
+# switch split library mode back off once books_path is cleared.
 SPLIT_STATE=/data/.cwa-split-library
 if bashio::var.has_value "${BOOKS_PATH}"; then
     mkdir -p "${LIBRARY_PATH}" "${BOOKS_PATH}"

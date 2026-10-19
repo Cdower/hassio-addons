@@ -12,8 +12,11 @@
 #            is used, bring an existing metadata.db over from it: a library
 #            that used to live entirely on the share keeps its database. The
 #            share's copy is renamed to metadata.db.pre-split, so nothing
-#            mistakes it for the live one. Records the books_path in the state
-#            file; later starts with the same books_path do nothing.
+#            mistakes it for the live one. When only library_path changed
+#            since then, bring the database over from the previous
+#            library_path instead (or, if that is gone, from the
+#            metadata_db_export copy in books_path). Records both paths in
+#            the state file; later starts with the same paths do nothing.
 #   enable   (init-cwa-split-library, after cwa-auto-library has created
 #            app.db) turn split library mode on, pointing it at BOOKS_DIR.
 #   disable  turn split library mode off again.
@@ -27,6 +30,7 @@
 #   split_library.py disable [--db PATH]
 
 import argparse
+import json
 import os
 import pathlib
 import shutil
@@ -37,6 +41,8 @@ DEFAULT_DB = "/config/app.db"
 METADATA_DB = "metadata.db"
 # What the share's copy is renamed to once it has been brought over.
 PRE_SPLIT_SUFFIX = ".pre-split"
+# What the previous library_path's copy is renamed to after a move.
+MOVED_SUFFIX = ".moved"
 # Files SQLite keeps next to a database. -shm is never copied: SQLite rebuilds
 # it, and a stale one is harmful.
 SIDE_FILES = ("-wal", "-shm", "-journal")
@@ -60,17 +66,24 @@ def remove(path):
 
 
 def read_state(path):
+    """(library_dir, books_dir) last prepared, or None. Both are needed: a
+    new library_path with the same books_path still needs its database."""
     try:
         with open(path, encoding="utf-8") as fh:
-            return fh.read().strip() or None
+            state = json.load(fh)
+        return (state["library"], state["books"])
     except FileNotFoundError:
+        return None
+    except (ValueError, KeyError, TypeError) as exc:
+        log(f"WARNING: ignoring unreadable {path}: {exc}")
         return None
 
 
-def write_state(path, books_dir):
+def write_state(path, library_dir, books_dir):
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as fh:
-        fh.write(f"{books_dir}\n")
+        json.dump({"library": library_dir, "books": books_dir}, fh)
+        fh.write("\n")
     os.replace(tmp, path)
 
 
@@ -122,14 +135,21 @@ def stage(source, staging_dir):
     return staged, books
 
 
-def set_aside(path):
-    """Rename database path (and its side files) to <path>.pre-split, without
+def stage_or_fail(source, staging_dir):
+    try:
+        return stage(source, staging_dir)
+    except (OSError, sqlite3.Error) as exc:
+        raise SplitError(f"could not read {source}: {exc}")
+
+
+def set_aside(path, suffix=PRE_SPLIT_SUFFIX):
+    """Rename database path (and its side files) to <path><suffix>, without
     overwriting an earlier one. Returns the new name, or None on failure."""
-    target = path + PRE_SPLIT_SUFFIX
+    target = path + suffix
     n = 1
     while os.path.lexists(target):
         n += 1
-        target = f"{path}{PRE_SPLIT_SUFFIX}.{n}"
+        target = f"{path}{suffix}.{n}"
     try:
         os.rename(path, target)
         for side in ("-wal", "-journal"):
@@ -165,50 +185,106 @@ def chown(path, uid, gid):
         log(f"WARNING: could not chown {path}: {exc}")
 
 
+def install(staged, local, local_books, uid, gid):
+    """Put the staged database in place as the live one in library_path."""
+    if local_books == 0:
+        log(f"replacing the empty library in {local}")
+        set_aside(local)
+    os.replace(staged, local)
+    chown(local, uid, gid)
+
+
+def first_setup(local, local_books, shared, staging, uid, gid):
+    """books_path is new: take over the library already in it, if any."""
+    if not os.path.exists(shared):
+        return "kept-local" if local_books is not None else "new"
+    staged, shared_books = stage_or_fail(shared, staging)
+    if local_books and shared_books:
+        raise SplitError(
+            f"both {local} ({local_books} books) and {shared} "
+            f"({shared_books} books) hold a library, and it is not "
+            "clear which one CWA should use. Keep the one you want: "
+            f"rename or delete the other (if {shared} is the add-on's "
+            "own metadata_db_export copy, delete that one), then "
+            "restart.")
+    if local_books:
+        log(f"{shared} holds no books; keeping {local}")
+        outcome = "kept-local"
+    else:
+        install(staged, local, local_books, uid, gid)
+        log(f"moved the library database from {shared} to {local} "
+            f"({shared_books} books)")
+        outcome = "imported"
+    renamed = set_aside(shared)
+    if renamed:
+        log(f"the copy left in books_path is now {renamed} and is no "
+            "longer used")
+    return outcome
+
+
+def library_moved(previous_dir, local, local_books, shared, staging, uid, gid):
+    """Only library_path changed: carry the live database over from the
+    previous library_path. books_path was set up before, and that moved its
+    own metadata.db aside, so one there now is the metadata_db_export copy:
+    the fallback when the previous library_path is gone."""
+    previous = os.path.join(previous_dir, METADATA_DB)
+    previous_books = None
+    if os.path.exists(previous):
+        staged, previous_books = stage_or_fail(previous, staging)
+    if local_books:
+        if previous_books:
+            raise SplitError(
+                f"library_path changed from {previous_dir}, and both {previous} "
+                f"({previous_books} books) and {local} ({local_books} books) "
+                "hold a library for the same books_path. Keep the one you "
+                "want: rename or delete the other, then restart.")
+        log(f"library_path changed from {previous_dir}; using the library "
+            f"already in {local}")
+        return "kept-local"
+    if previous_books is not None:
+        install(staged, local, local_books, uid, gid)
+        log(f"library_path changed: moved the library database from "
+            f"{previous} to {local} ({previous_books} books)")
+        renamed = set_aside(previous, MOVED_SUFFIX)
+        if renamed:
+            log(f"the copy left in the old library_path is now {renamed} and "
+                "is no longer used")
+        return "moved"
+    if os.path.exists(shared):
+        staged, shared_books = stage_or_fail(shared, staging)
+        install(staged, local, local_books, uid, gid)
+        log(f"library_path changed and {previous} is gone: restored the "
+            f"library database from the metadata_db_export copy {shared} "
+            f"({shared_books} books)")
+        return "restored-export"
+    if local_books is None:
+        log(f"WARNING: library_path changed from {previous_dir}, but there is "
+            f"no {METADATA_DB} there or in books_path: CWA starts a new, "
+            "empty library. Copy the library's metadata.db into "
+            f"{os.path.dirname(local)} to use the books in books_path.")
+        return "new"
+    return "kept-local"
+
+
 def prepare(library_dir, books_dir, state_path, uid=1000, gid=1000):
+    library_dir = os.path.normpath(library_dir)
     books_dir = os.path.normpath(books_dir)
-    if read_state(state_path) == books_dir:
+    state = read_state(state_path)
+    if state == (library_dir, books_dir):
         return "unchanged"
 
     local = os.path.join(library_dir, METADATA_DB)
     shared = os.path.join(books_dir, METADATA_DB)
     staging = os.path.join(library_dir, STAGING_NAME)
-    outcome = None
     shutil.rmtree(staging, ignore_errors=True)
     try:
         local_books = count_books(local) if os.path.exists(local) else None
-        if os.path.exists(shared):
-            try:
-                staged, shared_books = stage(shared, staging)
-            except (OSError, sqlite3.Error) as exc:
-                raise SplitError(f"could not read {shared}: {exc}")
-            if local_books and shared_books:
-                raise SplitError(
-                    f"both {local} ({local_books} books) and {shared} "
-                    f"({shared_books} books) hold a library, and it is not "
-                    "clear which one CWA should use. Keep the one you want: "
-                    f"rename or delete the other (if {shared} is the add-on's "
-                    "own metadata_db_export copy, delete that one), then "
-                    "restart.")
-            if local_books:
-                log(f"{shared} holds no books; keeping {local}")
-                outcome = "kept-local"
-            else:
-                if local_books == 0:
-                    log(f"replacing the empty library in {local}")
-                    set_aside(local)
-                os.replace(staged, local)
-                chown(local, uid, gid)
-                log(f"moved the library database from {shared} to {local} "
-                    f"({shared_books} books)")
-                outcome = "imported"
-            renamed = set_aside(shared)
-            if renamed:
-                log(f"the copy left in books_path is now {renamed} and is no "
-                    "longer used")
+        if state is not None and state[1] == books_dir:
+            outcome = library_moved(
+                state[0], local, local_books, shared, staging, uid, gid)
         else:
-            outcome = "kept-local" if local_books is not None else "new"
-            if local_books is None and book_folders(books_dir):
+            outcome = first_setup(local, local_books, shared, staging, uid, gid)
+            if outcome == "new" and book_folders(books_dir):
                 log(f"WARNING: {books_dir} has folders but no {METADATA_DB}, "
                     f"and {library_dir} has none either: CWA starts a new, "
                     "empty library. Put the library's metadata.db in "
@@ -221,7 +297,7 @@ def prepare(library_dir, books_dir, state_path, uid=1000, gid=1000):
     finally:
         shutil.rmtree(staging, ignore_errors=True)
 
-    write_state(state_path, books_dir)
+    write_state(state_path, library_dir, books_dir)
     return outcome
 
 

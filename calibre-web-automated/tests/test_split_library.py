@@ -69,7 +69,8 @@ class PrepareTest(unittest.TestCase):
         self.assertEqual(titles(self.local), ["Dune", "Emma"])
         self.assertFalse(os.path.exists(self.shared))
         self.assertEqual(titles(self.shared + ".pre-split"), ["Dune", "Emma"])
-        self.assertEqual(split_library.read_state(self.state), self.books)
+        self.assertEqual(split_library.read_state(self.state),
+                         (self.library, self.books))
         self.assertFalse(os.path.exists(
             os.path.join(self.library, split_library.STAGING_NAME)))
 
@@ -134,7 +135,8 @@ class PrepareTest(unittest.TestCase):
     def test_nothing_anywhere_starts_new_library(self):
         self.assertEqual(self.prepare(), "new")
         self.assertFalse(os.path.exists(self.local))
-        self.assertEqual(split_library.read_state(self.state), self.books)
+        self.assertEqual(split_library.read_state(self.state),
+                         (self.library, self.books))
 
     def test_warns_about_book_folders_without_a_database(self):
         os.makedirs(os.path.join(self.books, "Frank Herbert", "Dune (1)"))
@@ -176,6 +178,80 @@ class PrepareTest(unittest.TestCase):
         self.assertEqual(self.prepare(), "kept-local")
         self.assertEqual(sorted(os.listdir(os.path.dirname(self.library))),
                          ["calibre-library", "lib #1 ?x %41"])
+
+    def move_library(self):
+        """Point library_path at a new, empty folder, keeping books_path."""
+        self.old_library, self.old_local = self.library, self.local
+        self.library = os.path.join(os.path.dirname(self.library), "moved-library")
+        os.makedirs(self.library)
+        self.local = os.path.join(self.library, "metadata.db")
+
+    def test_library_path_change_moves_the_database(self):
+        make_library(self.shared, ["Dune"]).close()
+        self.prepare()
+        # metadata_db_export's copy, a little behind the live database.
+        make_library(self.shared, []).close()
+        con = sqlite3.connect(self.local)
+        con.execute("INSERT INTO books (title) VALUES ('Emma')")
+        con.commit()
+        con.close()
+
+        self.move_library()
+        self.assertEqual(self.prepare(), "moved")
+        self.assertEqual(titles(self.local), ["Dune", "Emma"])
+        self.assertFalse(os.path.exists(self.old_local))
+        self.assertEqual(titles(self.old_local + ".moved"), ["Dune", "Emma"])
+        # The export copy is left for the exporter to replace.
+        self.assertEqual(titles(self.shared), [])
+        self.assertEqual(split_library.read_state(self.state),
+                         (self.library, self.books))
+
+    def test_library_path_change_restores_export_when_old_folder_is_gone(self):
+        make_library(self.shared, ["Dune"]).close()
+        self.prepare()
+        make_library(self.shared, ["Dune", "Emma"]).close()  # the export copy
+        self.move_library()
+        os.remove(self.old_local)
+        self.assertEqual(self.prepare(), "restored-export")
+        self.assertEqual(titles(self.local), ["Dune", "Emma"])
+        self.assertIn("metadata_db_export copy", self.out.getvalue())
+
+    def test_library_path_change_to_an_existing_library_keeps_it(self):
+        make_library(self.shared, ["Dune"]).close()
+        self.prepare()
+        os.remove(self.local)
+        self.move_library()
+        make_library(self.local, ["Emma"]).close()
+        self.assertEqual(self.prepare(), "kept-local")
+        self.assertEqual(titles(self.local), ["Emma"])
+
+    def test_library_path_change_with_libraries_in_both_folders_fails(self):
+        make_library(self.shared, ["Dune"]).close()
+        self.prepare()
+        self.move_library()
+        make_library(self.local, ["Emma"]).close()
+        with self.assertRaises(split_library.SplitError):
+            self.prepare()
+        self.assertEqual(titles(self.old_local), ["Dune"])
+        self.assertEqual(titles(self.local), ["Emma"])
+        self.assertEqual(split_library.read_state(self.state),
+                         (self.old_library, self.books))
+
+    def test_library_path_change_with_no_database_anywhere_warns(self):
+        make_library(self.shared, ["Dune"]).close()
+        self.prepare()
+        os.remove(self.local)
+        self.move_library()
+        self.assertEqual(self.prepare(), "new")
+        self.assertFalse(os.path.exists(self.local))
+        self.assertIn("starts a new, empty library", self.out.getvalue())
+
+    def test_unreadable_state_is_treated_as_first_setup(self):
+        with open(self.state, "w") as fh:
+            fh.write("/old/single-line/format\n")
+        make_library(self.shared, ["Dune"]).close()
+        self.assertEqual(self.prepare(), "imported")
+        self.assertEqual(titles(self.local), ["Dune"])
 
     def test_main_reports_failure(self):
         with open(self.shared, "wb") as fh:

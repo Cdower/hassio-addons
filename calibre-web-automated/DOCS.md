@@ -104,7 +104,9 @@ ingest_path: /mnt/smb/cwa-book-ingest
 - renames the copy left on the NAS to `metadata.db.pre-split`, so it is not mistaken for the live database (an existing `.pre-split` file is never overwritten);
 - refuses to start, without changing anything, if both folders hold a library with books, since only you can tell which one is right. Rename or delete the one you don't want, then restart.
 
-It does this only once per `books_path`. If your library is on local storage and you want to move only the books out to the NAS, stop the add-on, move every book folder (everything except `metadata.db`) into `books_path`, then set `books_path` and start it. The log warns if `library_path` still has book folders in it.
+It does this only once per `books_path`. If you later change only `library_path` (keeping `books_path`), the add-on moves `metadata.db` over from the previous `library_path` and renames the copy left there to `metadata.db.moved`; if the previous folder is gone, it restores the database from the `metadata_db_export` copy in `books_path`, if there is one. If the new `library_path` already holds a library with books while the old one does too, it refuses to start until you remove one.
+
+If your library is on local storage and you want to move only the books out to the NAS, stop the add-on, move every book folder (everything except `metadata.db`) into `books_path`, then set `books_path` and start it. The log warns if `library_path` still has book folders in it.
 
 How it behaves:
 
@@ -115,7 +117,7 @@ How it behaves:
 
 **`metadata_db_export`.** With `books_path` set, the NAS folder holds only the book files, so Calibre desktop cannot open it and a NAS backup of it has no database. Turn on `metadata_db_export` to have the add-on keep a copy of `metadata.db` there:
 
-- It is written after changes to the live database settle (about a minute after the last change; at least every 10 minutes while the library keeps changing), and once more when the add-on stops. Each copy is a consistent snapshot, written beside the old one and then renamed over it, so a reader never sees a half-written file.
+- It is written after changes to the live database settle (about a minute after the last change; at least every 10 minutes while the library keeps changing), and once more when the add-on stops. The add-on allows up to 30 seconds to stop so that last copy can finish on a slow NAS. Each copy is a consistent snapshot, written beside the old one and then renamed over it, so a reader never sees a half-written file.
 - **It is a read-only copy.** It flows one way, from the add-on to the NAS. Anything Calibre desktop writes to it is replaced by the next export (the log warns when that happens). Make changes in CWA.
 - The add-on never reads it back while `books_path` stays the same.
 

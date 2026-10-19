@@ -30,6 +30,11 @@ map:
     path: /addon_config
 privileged:
   - SYS_ADMIN
+# Seconds Home Assistant waits for the add-on to stop before killing it
+# (default 10). The stop has to fit CWA shutting down and then
+# metadata_db_export's final copy of metadata.db to the NAS; s6's own budget
+# for that is S6_SERVICES_GRACETIME in the Dockerfile.
+timeout: 30
 image: ghcr.io/cdower/{arch}-hassio-addon-calibre-web-automated
 options:
   library_path: /addon_config/calibre-library
