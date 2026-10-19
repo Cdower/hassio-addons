@@ -1,4 +1,4 @@
-ARG BUILD_FROM="ghcr.io/new-usemame/calibre-web-nextgen:v4.1.40"
+ARG BUILD_FROM="ghcr.io/new-usemame/calibre-web-nextgen:v4.1.48"
 # hadolint ignore=DL3006
 FROM ${BUILD_FROM}
 

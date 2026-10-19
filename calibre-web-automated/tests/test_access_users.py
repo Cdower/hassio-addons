@@ -79,10 +79,23 @@ def _make_db(path, migrated=False):
             "    theme INTEGER DEFAULT 0,\n"
             "    kindle_mail_subject VARCHAR(256),\n"
             "    auto_send_enabled BOOLEAN DEFAULT 0,\n"
-            "    allow_additional_ereader_emails BOOLEAN DEFAULT 1\n",
+            "    allow_additional_ereader_emails BOOLEAN DEFAULT 1,\n"
+            "    ui_font_body VARCHAR DEFAULT '',\n"
+            "    ui_font_display VARCHAR DEFAULT '',\n"
+            "    has_own_library BOOLEAN NOT NULL DEFAULT 0,\n"
+            "    user_library_seeded BOOLEAN NOT NULL DEFAULT 0,\n"
+            "    my_library_intro_dismissed BOOLEAN NOT NULL DEFAULT 0\n",
         )
     con.execute(user_sql)
-    con.execute(SETTINGS_SQL)
+    settings_sql = SETTINGS_SQL
+    if migrated:
+        settings_sql = settings_sql.replace(
+            "    config_reverse_proxy_login_header_name VARCHAR\n",
+            "    config_reverse_proxy_login_header_name VARCHAR,\n"
+            "    config_default_ui_font_body VARCHAR DEFAULT 'serif',\n"
+            "    config_default_ui_font_display VARCHAR DEFAULT 'bogus'\n",
+        )
+    con.execute(settings_sql)
     con.execute(
         "INSERT INTO settings (config_default_role, config_default_show, "
         "config_default_locale, config_default_language, "
@@ -176,10 +189,12 @@ class SetupAccessTest(unittest.TestCase):
         self.assertEqual(_run("enable", self.db, ["alice@gmail.com"]), 0)
         rows = self._query(
             "SELECT theme, kobo_only_shelves_sync, opds_only_shelves_sync, "
-            "auto_send_enabled, allow_additional_ereader_emails "
+            "auto_send_enabled, allow_additional_ereader_emails, "
+            "ui_font_body, ui_font_display, has_own_library "
             "FROM user WHERE name = 'alice@gmail.com'"
         )
-        self.assertEqual(rows, [(1, 0, 0, 0, 1)])
+        # 'bogus' is outside upstream's font allowlist, so it degrades to "".
+        self.assertEqual(rows, [(1, 1, 0, 0, 1, "serif", "", 0)])
 
     def test_user_schema_mismatch_skips_creation_but_enables_login(self):
         _make_db(self.db)
