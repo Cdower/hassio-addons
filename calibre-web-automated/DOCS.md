@@ -253,6 +253,7 @@ When enabled, CWA itself is pinned to `127.0.0.1` inside the container and nginx
 
 ## Known issues
 
+- **`Failed to save: Missing option '<name>' in root`**: Home Assistant validates the whole saved options set against the add-on's current schema, but never adds an option introduced by an update to an install that predates it, so a save can fail over an option you never saw. Open the configuration page's ⋮ menu → **Edit in YAML**, add the option the message names with the default from the table above (e.g. `metadata_db_export: false`), and save. Every option this add-on has added since its first release is now optional, so it cannot happen again; after updating the add-on repository (Add-on Store → ⋮ → **Check for updates**) the save works without the extra line.
 - **Kobo sync URLs**: CWA generates absolute URLs for Kobo sync based on the host it sees the request from. Make sure your Kobo can reach CWA at that host:port (open Settings → Server → Server URLs in CWA to inspect the URL it generated). If CWA is fronted by Cloudflare/nginx-proxy-manager/Traefik, bump `trusted_proxy_count` so CWA picks up the original host from `X-Forwarded-Host`.
 - **File ownership**: The app runs as uid/gid 1000 to match HA's `/share` and `/media`, so files it writes there are owned 1000:1000. If you also access the share over Samba and need different ownership, change it on the host or via Samba's `force user` option.
 

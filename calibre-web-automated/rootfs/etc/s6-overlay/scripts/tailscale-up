@@ -36,7 +36,11 @@ apply_serve_state() {
     # call when nothing was configured.
     "${TS}" --socket="${SOCK}" serve reset 2>/dev/null || true
 
-    if ! bashio::config.true 'tailscale_serve'; then
+    # `tailscale_serve` is optional in config.yaml (see the comment above
+    # its schema), so it can be missing from the stored options of an
+    # install older than it is; its default is true, which
+    # `bashio::config.true` cannot express.
+    if [ "$(bashio::config 'tailscale_serve' true)" != "true" ]; then
         if bashio::config.true 'tailscale_funnel'; then
             bashio::log.warning "tailscale_funnel is true but tailscale_serve is false — Funnel requires serve. Disabling both."
         fi
@@ -70,12 +74,22 @@ if ! wait_for_sock; then
 fi
 
 AUTHKEY=$(bashio::config 'tailscale_authkey')
-HOSTNAME=$(bashio::config 'tailscale_hostname')
-# Parse into an array so each flag becomes a distinct argv element and shell
-# metacharacters in user input are never interpreted by the shell.
-read -ra EXTRA_ARGS <<< "$(bashio::config 'tailscale_extra_args')"
 
-# Default the tailnet hostname to `cwa` if the user didn't pick one.
+# `tailscale_hostname` and `tailscale_extra_args` are optional too, so they can
+# be missing from the stored options of an install older than they are, and
+# `bashio::config` then prints the literal string "null" -- which
+# `bashio::var.has_value` counts as a value. Name the hostname default here;
+# the extra args have no default to name (an empty second argument falls back
+# to "null"), so read them only when the option actually has a value.
+HOSTNAME=$(bashio::config 'tailscale_hostname' 'cwa')
+EXTRA_ARGS=()
+if bashio::config.has_value 'tailscale_extra_args'; then
+    # Parse into an array so each flag becomes a distinct argv element and
+    # shell metacharacters in user input are never interpreted by the shell.
+    read -ra EXTRA_ARGS <<< "$(bashio::config 'tailscale_extra_args')"
+fi
+
+# Default the tailnet hostname to `cwa` if the user cleared it.
 if ! bashio::var.has_value "${HOSTNAME}"; then
     HOSTNAME="cwa"
 fi
