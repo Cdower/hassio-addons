@@ -52,5 +52,25 @@ class AppArmorMountRulesTest(unittest.TestCase):
         self.assertIn("fstype=cifs", self.rules_for(match.group(1)))
 
 
+class SmbCapabilitiesTest(unittest.TestCase):
+    # mount.cifs drops privileges with libcap-ng, putting CAP_DAC_READ_SEARCH
+    # back into its permitted set. capset() refuses a capability the container
+    # was never given, and the mount fails with "Unable to apply new capability
+    # set." So the add-on must hold it, while AppArmor stops it being used (it
+    # is what open_by_handle_at, the "Shocker" container escape, checks for).
+    def test_mount_cifs_can_raise_dac_read_search(self):
+        config = read(os.path.join(ADDON_ROOT, "config.yaml"))
+        block = re.search(r"^privileged:\n((?:\s+-\s*\S+\n)+)", config, re.M)
+        self.assertIsNotNone(block, "no privileged list in config.yaml")
+        caps = re.findall(r"-\s*(\S+)", block.group(1))
+        self.assertIn("SYS_ADMIN", caps)
+        self.assertIn("DAC_READ_SEARCH", caps)
+
+    def test_dac_read_search_use_is_denied(self):
+        self.assertRegex(
+            read(PROFILE), r"(?m)^\s*deny\s+capability\s+dac_read_search\s*,",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -5,6 +5,12 @@ All notable changes to this add-on will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.48.1] - 2026-10-19
+
+### Fixed
+
+- `smb_share` could not be mounted: every attempt failed with `Unable to apply new capability set` and the add-on stopped with `Could not mount //server/share`. `mount.cifs` drops its privileges on start and keeps `CAP_DAC_READ_SEARCH` while doing so, and the kernel refuses to hand a process a capability its container never had. The add-on now also requests `DAC_READ_SEARCH`, and its AppArmor profile denies using it, so the only thing that changes is that `mount.cifs` can start. Home Assistant's security rating is unchanged.
+
 ## [4.1.48.0] - 2026-10-19
 
 ### Changed

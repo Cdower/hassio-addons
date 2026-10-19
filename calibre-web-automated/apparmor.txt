@@ -22,6 +22,11 @@ profile calibre-web-automated flags=(attach_disconnected,mediate_deleted) {
 
   network,
   capability,
+  # DAC_READ_SEARCH is granted (config.yaml) only so mount.cifs can put it
+  # into its capability sets while dropping privileges; nothing here needs to
+  # use it. Denying its use keeps open_by_handle_at -- the "Shocker" escape
+  # from a container that holds it -- refused, as under Docker's defaults.
+  deny capability dac_read_search,
   file,
   umount,
   signal (send, receive),
