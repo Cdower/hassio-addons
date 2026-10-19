@@ -64,9 +64,9 @@ options:
 # never adds a new option to an existing install's options.json -- so a
 # required option added later makes the config page unsaveable ("Missing
 # option '<name>' in root ...") until the option is typed in by hand in YAML
-# mode. Scripts reading an option that may be absent supply its default
-# (`bashio::config` prints "null" for it); `bashio::config.true` already reads
-# a missing option as false.
+# mode. Scripts reading an option that may be absent supply its default as
+# `bashio::config`'s second argument; `bashio::config.true` already reads a
+# missing option as false.
 schema:
   library_path: str
   books_path: str?
