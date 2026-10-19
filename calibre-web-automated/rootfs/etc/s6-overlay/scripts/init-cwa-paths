@@ -5,10 +5,47 @@
 # ==============================================================================
 set -e
 
-LIBRARY_PATH=$(bashio::config 'library_path')
-INGEST_PATH=$(bashio::config 'ingest_path')
-CONFIG_PATH=$(bashio::config 'config_path')
-PLUGINS_PATH=$(bashio::config 'plugins_path')
+# Print an option's value, or nothing when it is unset. `bashio::config`
+# prints the literal string "null" for an option missing from options.json
+# (which is what clearing an optional field in the UI does), and
+# `bashio::var.has_value` counts "null" as a value.
+config_value() {
+    local value
+    value=$(bashio::config "$1")
+    if [ "${value}" != "null" ]; then
+        printf '%s' "${value}"
+    fi
+}
+
+# True when path $2 is base $1 or lies under it.
+path_under() {
+    [ "$2" = "$1" ] || [[ "$2" == "$1"/* ]]
+}
+
+LIBRARY_PATH=$(config_value 'library_path')
+INGEST_PATH=$(config_value 'ingest_path')
+CONFIG_PATH=$(config_value 'config_path')
+PLUGINS_PATH=$(config_value 'plugins_path')
+PROVIDERS_PATH=$(config_value 'metadata_providers_path')
+SMB_SHARE=$(config_value 'smb_share')
+
+# The path options, as option:VARIABLE pairs, for the checks that apply to
+# all of them.
+PATH_OPTIONS=(
+    library_path:LIBRARY_PATH
+    ingest_path:INGEST_PATH
+    plugins_path:PLUGINS_PATH
+    metadata_providers_path:PROVIDERS_PATH
+)
+
+# Where `smb_share` is mounted inside the container. Path options point under
+# it to use the share.
+SMB_MOUNT_POINT=/mnt/smb
+
+# True when path $1 is on the mounted smb_share.
+on_smb_share() {
+    bashio::var.has_value "${SMB_SHARE}" && path_under "${SMB_MOUNT_POINT}" "$1"
+}
 
 # Match the LSIO base's PUID/PGID (set in the Dockerfile) so directories we
 # mkdir as root are usable by `abc` after it's remapped.
@@ -32,7 +69,8 @@ bashio::log.info "Configuring CWA paths..."
 # refuses to overwrite (e.g. /config/.config/calibre/plugins after the image
 # seeds it). Idempotent: inspects /proc/self/mountinfo via findmnt to confirm
 # whether target is already bind-mounted from source before mounting.
-# Requires privileged: [SYS_ADMIN] + apparmor: false in config.yaml.
+# Requires privileged: [SYS_ADMIN] in config.yaml and a matching mount rule
+# in apparmor.txt for each target.
 bind_user_path() {
     local source=$1 target=$2
     local real_source
@@ -47,6 +85,143 @@ bind_user_path() {
         mount --bind "${source}" "${target}"
     fi
 }
+
+# Mount `smb_share` at SMB_MOUNT_POINT, owned by APP_UID:APP_GID. Home
+# Assistant's own Network Storage mounts CIFS shares as uid/gid 0 with mode
+# 0755 and offers no way to change that, so `abc` cannot write to them; mounting
+# the share here lets us choose the owner. The password goes through a
+# credentials file rather than the mount options, so it never appears in
+# /proc/mounts or a process listing.
+mount_smb_share() {
+    local opts cred="" err="" attempt version username domain
+
+    if findmnt --noheadings --mountpoint "${SMB_MOUNT_POINT}" > /dev/null 2>&1; then
+        return 0
+    fi
+    mkdir -p "${SMB_MOUNT_POINT}"
+
+    # forceuid/forcegid: ignore any owner the server reports (Unix
+    # extensions), so every file is APP_UID:APP_GID.
+    opts="uid=${APP_UID},gid=${APP_GID},forceuid,forcegid,file_mode=0664,dir_mode=0775,iocharset=utf8"
+    version=$(config_value 'smb_version')
+    if [ -n "${version}" ]; then
+        opts+=",vers=${version}"
+    fi
+    username=$(config_value 'smb_username')
+    if [ -n "${username}" ]; then
+        # mktemp creates the file 0600.
+        cred=$(mktemp /run/cwa-smb-credentials.XXXXXX)
+        domain=$(config_value 'smb_domain')
+        {
+            printf 'username=%s\n' "${username}"
+            printf 'password=%s\n' "$(config_value 'smb_password')"
+            if [ -n "${domain}" ]; then
+                printf 'domain=%s\n' "${domain}"
+            fi
+        } > "${cred}"
+        opts+=",credentials=${cred}"
+    else
+        opts+=",guest"
+    fi
+
+    # The NAS can still be waking up when Home Assistant boots, so retry for
+    # about 20 seconds before giving up.
+    for attempt in 1 2 3 4 5; do
+        if err=$(mount -t cifs "${SMB_SHARE}" "${SMB_MOUNT_POINT}" -o "${opts}" 2>&1); then
+            rm -f "${cred}"
+            bashio::log.info "Mounted ${SMB_SHARE} at ${SMB_MOUNT_POINT} (owner ${APP_UID}:${APP_GID})"
+            return 0
+        fi
+        bashio::log.warning "Mounting ${SMB_SHARE} failed (attempt ${attempt}/5): ${err}"
+        if [ "${attempt}" -lt 5 ]; then
+            sleep $((attempt * 2))
+        fi
+    done
+    rm -f "${cred}"
+    # Fatal: carrying on would point CWA at empty local directories under
+    # SMB_MOUNT_POINT and it would start a brand-new, empty library there.
+    bashio::exit.nok "Could not mount ${SMB_SHARE}: ${err}"
+}
+
+# Copy CWA's state from where /config used to live (the deprecated
+# config_path) into /data once, so an install that kept /config on a share
+# moves to local storage with its users and settings intact. Runs before /data
+# is seeded or bind-mounted.
+#
+# Fails startup if the copy fails: carrying on would let cwa-init create a
+# fresh app.db in /data, and that app.db would then block any later import.
+import_legacy_config() {
+    local source=$1 staging=/data/.cwa-config-import entry name
+
+    if bashio::fs.file_exists "${IMPORT_MARKER}"; then
+        bashio::log.info "CWA's config was already imported from $(cat "${IMPORT_MARKER}"); nothing to import"
+        return 0
+    fi
+    if bashio::fs.file_exists /data/app.db; then
+        bashio::log.warning "Local storage already has an app.db; not importing from ${source}. CWA uses the local copy; the one in ${source} is ignored."
+        return 0
+    fi
+    if ! bashio::fs.file_exists "${source}/app.db"; then
+        bashio::log.info "${source} has no app.db; nothing to import"
+        return 0
+    fi
+
+    bashio::log.info "Importing CWA config from ${source} into local storage (one-time)"
+    rm -rf "${staging}"
+    mkdir -p "${staging}"
+    if ! cp -R --preserve=timestamps "${source}/." "${staging}/"; then
+        rm -rf "${staging}"
+        bashio::exit.nok "Importing CWA config from ${source} failed (see above). Fix access to it, or clear config_path to start with an empty config."
+    fi
+    # Move the copy into place one top-level entry at a time. Anything /data
+    # already has (options.json, Tailscale state, the add-on's own markers) is
+    # kept as is.
+    for entry in "${staging}"/* "${staging}"/.[!.]* "${staging}"/..?*; do
+        [ -e "${entry}" ] || continue
+        name=$(basename "${entry}")
+        if [ -e "/data/${name}" ]; then
+            bashio::log.warning "Not importing ${name}: /data already has one"
+            continue
+        fi
+        mv "${entry}" "/data/${name}"
+        chown_if_root -R "${APP_UID}:${APP_GID}" "/data/${name}"
+    done
+    rm -rf "${staging}"
+    printf '%s\n' "${source}" > "${IMPORT_MARKER}"
+    # The import is the seed; skip seeding /data from the image defaults.
+    touch /data/.cwa-initialized
+    bashio::log.info "Imported CWA config from ${source}. The copy left there is no longer used."
+}
+
+IMPORT_MARKER=/data/.cwa-config-imported
+# Where earlier versions shipped their default folders, outside the add-on's
+# backups.
+LEGACY_ROOT=/share/calibre
+# The shipped config_path before /config moved to local storage. An install
+# that never saved its options has no config_path stored at all, so look here
+# too, or that install would come up with an empty config.
+LEGACY_DEFAULT_CONFIG=${LEGACY_ROOT}/config
+
+# The add-on's addon_configs folder (`map: addon_config` in config.yaml). Like
+# /data it is part of the add-on's own backups, and unlike /data it is
+# reachable over Samba, so the shipped library, ingest and plugins folders
+# live here.
+ADDON_CONFIG=/addon_config
+
+# Earlier versions shipped those defaults under LEGACY_ROOT, with the same
+# folder names. An install that never saved its options picks up the new
+# defaults on upgrade; if its data is still in the old default folder, keep
+# using that instead of starting an empty one.
+for pair in LIBRARY_PATH:calibre-library INGEST_PATH:cwa-book-ingest PLUGINS_PATH:plugins; do
+    var=${pair%%:*}
+    new_default=${ADDON_CONFIG}/${pair#*:}
+    old_default=${LEGACY_ROOT}/${pair#*:}
+    if [ "${!var}" = "${new_default}" ] && [ ! -e "${new_default}" ] \
+            && [ -e "${old_default}" ]; then
+        bashio::log.warning "Using ${old_default} instead of the new default ${new_default}, because your existing data is there. It is not in this add-on's backups; move it to ${new_default} to include it."
+        printf -v "${var}" '%s' "${old_default}"
+    fi
+done
 
 # Validate user-supplied paths up front. library_path and ingest_path are
 # required by the schema; config_path and plugins_path are optional. All
@@ -68,30 +243,69 @@ if bashio::var.has_value "${CONFIG_PATH}"; then
     fi
     # Must not be /config or anything under /config/ to avoid seeding /config
     # onto itself and then removing it.
-    if [ "${CONFIG_PATH}" = "/config" ] || [[ "${CONFIG_PATH}" == /config/* ]]; then
+    if path_under /config "${CONFIG_PATH}"; then
         bashio::exit.nok "config_path must not be /config or a path under /config/ (got: ${CONFIG_PATH})"
     fi
 fi
-
-# /config: default to /data so persistent state survives add-on upgrades. If
-# the user set config_path (e.g. /share/nas/calibre/config), use that so
-# /config can live on a network share. Pair a network-share target with
-# network_share_mode: true so SQLite WAL is disabled on app.db.
-if bashio::var.has_value "${CONFIG_PATH}"; then
-    CWA_CONFIG_TARGET="${CONFIG_PATH}"
-    bashio::log.info "Using user-provided config_path: ${CWA_CONFIG_TARGET}"
+if bashio::var.has_value "${SMB_SHARE}"; then
+    if [[ ! "${SMB_SHARE}" =~ ^//[^/]+/[^/]+ ]]; then
+        bashio::exit.nok "smb_share must look like //server/share (got: ${SMB_SHARE})"
+    fi
 else
-    CWA_CONFIG_TARGET="/data"
+    # Without a share, SMB_MOUNT_POINT is a plain directory in the container's
+    # writable layer, which is thrown away whenever the add-on is recreated.
+    for pair in "${PATH_OPTIONS[@]}" config_path:CONFIG_PATH; do
+        var=${pair#*:}
+        if path_under "${SMB_MOUNT_POINT}" "${!var}"; then
+            bashio::exit.nok "${pair%%:*} (${!var}) is under ${SMB_MOUNT_POINT}, but smb_share is not set"
+        fi
+    done
 fi
-mkdir -p "${CWA_CONFIG_TARGET}"
+
+if bashio::var.has_value "${SMB_SHARE}"; then
+    mount_smb_share
+fi
+
+# Home Assistant backs up only /data and /addon_config with this add-on.
+# Paths on the SMB share are the NAS's to back up; anything else (e.g. under
+# /share or /media) is covered only by full backups that include that folder.
+for pair in "${PATH_OPTIONS[@]}"; do
+    var=${pair#*:}
+    path=${!var}
+    if [ -n "${path}" ] && ! path_under /data "${path}" \
+            && ! path_under "${ADDON_CONFIG}" "${path}" \
+            && ! path_under "${SMB_MOUNT_POINT}" "${path}"; then
+        bashio::log.warning "${pair%%:*} (${path}) is not in this add-on's backups; only full Home Assistant backups that include its folder cover it. Use a path under ${ADDON_CONFIG} to include it."
+    fi
+done
+
+# Starting from a restored backup: put the consistent database copies taken
+# by `backup_pre` in place of the possibly torn live files (see
+# db_snapshot.py). Must run before anything opens the databases.
+if ! /lsiopy/bin/python3 /opt/cwa-backup/db_snapshot.py restore; then
+    bashio::exit.nok "Restoring databases from backup snapshots failed (see above)"
+fi
+mkdir -p "${ADDON_CONFIG}"
+chown_if_root "${APP_UID}:${APP_GID}" "${ADDON_CONFIG}"
+
+# /config always lives on the add-on's local /data: SQLite's locking is not
+# reliable on network shares, and /data survives add-on upgrades and is part
+# of Home Assistant backups. config_path used to put /config on a share; it is
+# now only a one-time import source.
+CWA_CONFIG_TARGET="/data"
+if bashio::var.has_value "${CONFIG_PATH}"; then
+    bashio::log.warning "config_path is deprecated: /config now always lives on the add-on's local storage. Clear config_path in the add-on options."
+    if [ "$(realpath -m "${CONFIG_PATH}")" != "${CWA_CONFIG_TARGET}" ]; then
+        import_legacy_config "${CONFIG_PATH}"
+    fi
+elif ! bashio::fs.file_exists "${CWA_CONFIG_TARGET}/app.db" \
+        && bashio::fs.file_exists "${LEGACY_DEFAULT_CONFIG}/app.db"; then
+    import_legacy_config "${LEGACY_DEFAULT_CONFIG}"
+fi
 
 # Seed the persistent target from the current contents of /config on first
 # use. This must run before the bind mount below: at this point /config is
-# the upstream image's default contents (on a brand-new install) or the
-# previous bind-mount target (on a later run after switching config_path),
-# so the new target gets the right starting state either way. The sentinel
-# lives next to the data so a freshly-mounted target is seeded even if
-# /data has already been initialized on a previous run.
+# the upstream image's default contents. The sentinel lives next to the data.
 if ! bashio::fs.file_exists "${CWA_CONFIG_TARGET}/.cwa-initialized"; then
     bashio::log.info "First use of ${CWA_CONFIG_TARGET} — seeding from current /config contents"
     if [ -d /config ] && [ -n "$(ls -A /config 2>/dev/null || true)" ]; then
@@ -110,26 +324,26 @@ bind_user_path "${CWA_CONFIG_TARGET}" /config
 # under NETWORK_SHARE_MODE, where it skips it entirely. That leaves state
 # written under a different uid unwritable for `abc` -- most commonly an
 # app.db from the v4.0.6-based add-on, which ran as 911 before the image
-# pinned PUID=1000 -- and CWA then dies on its first migration with
-# "attempt to write a readonly database". Re-own only what doesn't already
-# belong to APP_UID, so a correctly-owned share costs one traversal and no
-# writes. Runs before plugins_path is bind-mounted under /config, and -xdev
-# keeps it off any other filesystem. Failures warn instead of aborting:
-# shares whose ownership is fixed by mount options reject chown outright.
-if bashio::config.true 'network_share_mode'; then
+# pinned PUID=1000, carried into /data by the config import -- and CWA then
+# dies on its first migration with "attempt to write a readonly database".
+# The mode is on when the option is set or when library_path is on the SMB
+# share (see below). Re-own only what doesn't already belong to APP_UID, so a
+# correctly-owned /config costs one traversal and no writes. Runs before
+# plugins_path is bind-mounted under /config, and -xdev keeps it off any other
+# filesystem. Failures warn instead of aborting startup.
+if bashio::config.true 'network_share_mode' || on_smb_share "${LIBRARY_PATH}"; then
     if ! find /config -xdev \( ! -user "${APP_UID}" -o ! -group "${APP_GID}" \) \
             -exec chown -h "${APP_UID}:${APP_GID}" {} + 2>/dev/null; then
         bashio::log.warning \
-            "Could not re-own everything under ${CWA_CONFIG_TARGET} to ${APP_UID}:${APP_GID} (network share that disallows chown?)"
+            "Could not re-own everything under ${CWA_CONFIG_TARGET} to ${APP_UID}:${APP_GID}"
     fi
     # Name the real cause up front rather than leave it to a SQLAlchemy
-    # traceback. Tested as APP_UID, not by owner: a share mounted with a
-    # permissive file_mode is writable whoever it reports as the owner.
+    # traceback. Tested as APP_UID, not by owner, so mode bits count too.
     if [ -e /config/app.db ] \
             && ! /command/s6-applyuidgid -u "${APP_UID}" -g "${APP_GID}" -G "" \
                 test -w /config/app.db; then
         bashio::log.error \
-            "${CWA_CONFIG_TARGET}/app.db (owner uid $(stat -c %u /config/app.db)) is not writable by uid ${APP_UID}; CWA will fail to start. Fix its ownership on the share, e.g. mount with uid=${APP_UID},gid=${APP_GID}."
+            "${CWA_CONFIG_TARGET}/app.db (owner uid $(stat -c %u /config/app.db)) is not writable by uid ${APP_UID}; CWA will fail to start."
     fi
 fi
 
@@ -162,16 +376,33 @@ fi
 # Surface options as env vars for downstream s6-rc longruns. The /run/s6/container_environment
 # directory is read by `with-contenv` for every service started after this oneshot.
 mkdir -p /run/s6/container_environment
-echo -n "$(bashio::config 'network_share_mode')" > /run/s6/container_environment/NETWORK_SHARE_MODE
-echo -n "$(bashio::config 'hardcover_token')"    > /run/s6/container_environment/HARDCOVER_TOKEN
+# On the SMB share, SQLite WAL corrupts and inotify misses files added from
+# other machines. network_share_mode handles both, so turn it on when a
+# database folder is on the share; /config always lives in /data, so that is
+# only ever the library. If only the ingest folder is there, just switch the
+# watchers to polling and keep WAL for the local databases.
+NETWORK_SHARE_MODE=$(bashio::config 'network_share_mode')
+if [ "${NETWORK_SHARE_MODE}" != "true" ]; then
+    if on_smb_share "${LIBRARY_PATH}"; then
+        bashio::log.info "library_path is on smb_share; enabling network_share_mode"
+        NETWORK_SHARE_MODE=true
+    elif on_smb_share "${INGEST_PATH}"; then
+        bashio::log.info "ingest_path is on smb_share; watching it by polling"
+        echo -n "poll" > /run/s6/container_environment/CWA_WATCH_MODE
+    fi
+fi
+echo -n "${NETWORK_SHARE_MODE}" > /run/s6/container_environment/NETWORK_SHARE_MODE
+# Read by init-cwa-metadata-providers.
+echo -n "${PROVIDERS_PATH}" > /run/s6/container_environment/CWA_METADATA_PROVIDERS_PATH
+echo -n "$(config_value 'hardcover_token')"    > /run/s6/container_environment/HARDCOVER_TOKEN
 echo -n "$(bashio::config 'trusted_proxy_count')" > /run/s6/container_environment/TRUSTED_PROXY_COUNT
 # Cloudflare Access mode: enabled only when BOTH options are set. When on,
 # CWA moves to loopback :8084 and nginx takes over :8083 (LAN, headers
 # stripped) and :8085 (docker-network-only, JWT-gated — the cloudflared
 # add-on's target). When off, nothing changes: CWA serves 0.0.0.0:8083.
-CF_TEAM_DOMAIN=$(bashio::config 'cloudflare_team_domain')
+CF_TEAM_DOMAIN=$(config_value 'cloudflare_team_domain')
 CF_TEAM_DOMAIN="${CF_TEAM_DOMAIN%.cloudflareaccess.com}"  # accept either form
-CF_ACCESS_AUD=$(bashio::config 'cloudflare_access_aud')
+CF_ACCESS_AUD=$(config_value 'cloudflare_access_aud')
 CWA_ACCESS_ENABLED=false
 if bashio::var.has_value "${CF_TEAM_DOMAIN}" && bashio::var.has_value "${CF_ACCESS_AUD}"; then
     CWA_ACCESS_ENABLED=true

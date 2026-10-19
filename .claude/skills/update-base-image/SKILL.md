@@ -38,6 +38,7 @@ blindly:
 | --- | --- | --- |
 | `rootfs/etc/s6-overlay/s6-rc.d/svc-calibre-web-automated/run` | `root/etc/s6-overlay/s6-rc.d/svc-calibre-web-automated/run` | adds optional `-i $CWA_BIND_ADDRESS` (via `BIND_ARGS`) on the `cwa-as-abc python3 -P -m cps` exec line so Cloudflare Access mode pins CWA to loopback. Security-critical: without it the auth header is spoofable. |
 | `rootfs/app/calibre-web-automated/cps/metadata_provider/arxiv.py` | `cps/metadata_provider/arxiv.py` | full replacement (arXiv provider). Check the `cps.services.Metadata` contract it implements hasn't changed. |
+| `apparmor.txt` | Docker's `docker-default` profile (moby `profiles/apparmor/template.go`) | adds mount rules for the bind mounts and the CIFS mount made by `init-cwa-paths`. If the new image adds a service that mounts anything, signals or ptraces across processes, or writes under `/proc/sys` or `/sys`, the profile must allow it or the add-on breaks only on AppArmor hosts (HAOS). |
 
 ```bash
 diff /tmp/cwa-upstream/root/etc/s6-overlay/s6-rc.d/svc-calibre-web-automated/run \
@@ -64,6 +65,19 @@ corresponding add-on code/tests must be updated:
 - Migration-added user columns (`theme`, `hardcover_token`, …):
   `grep -n "ALTER TABLE user ADD" cps/ub.py` — update the optional-column list in
   `rootfs/opt/cwa-access/setup_access.py` and the migrated fixture in the tests.
+- Metadata provider discovery: `cps/search_metadata.py` still imports every
+  file in `cps/metadata_provider/` (`os.listdir` + `importlib`) and picks up
+  `cps.services.Metadata` subclasses. `install_providers.py` relies on this to
+  add `metadata_providers_path` files; also confirm none of the new built-in
+  provider names is one users are likely to have used for a custom file.
+- `cwa-init` is still the service every CWA service waits on: the add-on makes
+  it depend on `init-cwa-metadata-providers` so providers are installed before
+  anything imports them (`ls root/etc/s6-overlay/s6-rc.d/*/dependencies.d`).
+- SQLite files CWA keeps in `/config` and the library: backups rely on
+  `rootfs/opt/cwa-backup/db_snapshot.py` snapshotting every `*.db` under
+  `/data` and `/addon_config` (`backup_pre`). A new database with another
+  extension (`grep -rhoE "/config/[A-Za-z0-9_./-]*\.(db|sqlite[0-9]?)" cps
+  scripts root`) would be backed up torn — extend the script if one appears.
 - `/lsiopy` venv still exists and ships `cryptography` + `werkzeug`
   (`grep -n lsiopy Dockerfile`, `grep -in "cryptography\|werkzeug" pyproject.toml`
   in the upstream clone) — the Dockerfile pip-installs PyJWT into it and
@@ -82,6 +96,7 @@ corresponding add-on code/tests must be updated:
 prek run --all-files
 pytest calibre-web-automated/tests/ -v
 docker build --build-arg BUILD_ARCH=amd64 calibre-web-automated/
+apparmor_parser -Q -K -S -M /etc/apparmor.d/abi/4.0 calibre-web-automated/apparmor.txt > /dev/null
 ```
 
 After the build, sanity-check the image: nginx has `http_auth_request_module`

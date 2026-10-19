@@ -5,15 +5,26 @@ All notable changes to this add-on will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [4.1.40.2] - 2026-10-19
+
+### Added
+
+- `smb_share` option (with `smb_username`, `smb_password`, `smb_domain`, `smb_version`): the add-on mounts an SMB/CIFS share itself at `/mnt/smb`, with files owned by the user CWA runs as. Home Assistant's Network Storage mounts CIFS shares writable only by root, and has no option to change that. On such a mount CWA could read the library but every write failed, which on a `/share`-hosted `config_path` crash-looped the add-on with `attempt to write a readonly database`. Point `library_path` / `ingest_path` under `/mnt/smb`. With `library_path` on the share, `network_share_mode` is turned on automatically; with only `ingest_path` there, the ingest watcher just switches to polling.
+- `metadata_providers_path` option: drop custom metadata provider `.py` files in that folder and they are installed next to CWA's built-in providers on start. A file named like a built-in provider is skipped, so built-ins are never overwritten; removing a file uninstalls it on the next restart.
+- Consistent SQLite backups. Home Assistant backs add-ons up by copying their files while they run, which can capture a damaged or out-of-date copy of a database in use. A `backup_pre` hook now snapshots every SQLite database in `/data` and `/addon_config` (CWA's `app.db` and `cwa.db`, the library's `metadata.db`) with SQLite's backup API, and `backup_post` removes the snapshots. The snapshots are listed in `/data/.cwa-backup-snapshots`; when the add-on starts with that list present (a restored backup), the snapshots replace the copied database files before CWA opens them. A normal start finds no list and does no searching.
+- A startup warning for each path option that is not part of the add-on's own backups (anything outside `/addon_config`, `/data` and the SMB share).
+- Custom AppArmor profile (`apparmor.txt`) replacing `apparmor: false`. It is Docker's default container profile plus the specific mounts the add-on makes. Home Assistant's security rating goes from 3 to 5.
 
 ### Changed
 
+- The default `library_path`, `ingest_path` and `plugins_path` moved from `/share/calibre/...` to the add-on's own config folder (`/addon_config/...`, `addon_configs/<id>_calibre-web-automated` on the host and over Samba), so they are part of the add-on's backups. An install that never changed these options and still has its data in the old `/share/calibre/...` folders keeps using them, with a warning in the log. Options you set yourself are not changed.
+- CWA's `/config` (app database, users, settings) now always lives on the add-on's local `/data`, so only the library and ingest folders sit on network storage. SQLite's locking is not reliable over the network, and `/data` is part of Home Assistant backups. `config_path` is deprecated and no longer in the default options. On first start, the add-on imports CWA's config once from `config_path` (or from the old default `/share/calibre/config` if `config_path` was never saved), as long as `/data` has no `app.db` yet. The old copy is left in place.
 - Updated the bundled Tailscale client from 1.96.4 to 1.102.3.
 
 ### Fixed
 
-- Crash on start with `network_share_mode: true`: `app.db is not writable` followed by `sqlite3.OperationalError: attempt to write a readonly database` during migration. Root cause: upstream's `cwa-init` skips its `chown -R abc:abc /config` whenever `NETWORK_SHARE_MODE` is on, so state written under another uid stays unwritable — typically an `app.db` created by the 4.0.6-based add-on, which ran as uid 911 before this image pinned `PUID=1000`. With `network_share_mode` on, the add-on now re-owns anything under `/config` that isn't already `1000:1000`, and if `app.db` is still not writable (a share whose ownership is fixed by its mount options) logs an error naming the cause instead of leaving it to a traceback.
+- Clearing an optional option in the UI (for example `config_path`, `plugins_path`, `cloudflare_team_domain` or `hardcover_token`) made the add-on read it as the literal string `null`. A cleared `config_path` then failed startup with `config_path must be an absolute path (got: null)`.
+- Crash on start with `network_share_mode` on (set, or turned on because `library_path` is on `smb_share`): `app.db is not writable` followed by `sqlite3.OperationalError: attempt to write a readonly database` during migration. Root cause: upstream's `cwa-init` skips its `chown -R abc:abc /config` whenever `NETWORK_SHARE_MODE` is on, so state written under another uid stays unwritable — typically an `app.db` created by the 4.0.6-based add-on, which ran as uid 911 before this image pinned `PUID=1000`, and carried over by the one-time config import. With `network_share_mode` on, the add-on now re-owns anything under `/config` that isn't already `1000:1000`, and if `app.db` is still not writable logs an error naming the cause instead of leaving it to a traceback.
 
 ## [4.1.40.1] - 2026-08-24
 
