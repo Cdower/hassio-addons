@@ -37,8 +37,8 @@ semver.
    the promoted section is published verbatim. If the add-on had nothing
    under `## [Unreleased]`, the PR says so and leaves a placeholder to
    replace.
-3. Run the **Release** workflow (Actions → Release → Run workflow) and give it
-   the add-on slug.
+3. Run the **Release** workflow (Actions → Release → Run workflow) and pick
+   the add-on from the dropdown.
 
 Steps 1 and 2 are a convenience; editing `config.yaml` and `CHANGELOG.md` by
 hand in an ordinary PR does the same job. Either way the version lands on
