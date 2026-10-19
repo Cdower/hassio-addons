@@ -23,6 +23,7 @@ path_under() {
 }
 
 LIBRARY_PATH=$(config_value 'library_path')
+BOOKS_PATH=$(config_value 'books_path')
 INGEST_PATH=$(config_value 'ingest_path')
 CONFIG_PATH=$(config_value 'config_path')
 PLUGINS_PATH=$(config_value 'plugins_path')
@@ -33,6 +34,7 @@ SMB_SHARE=$(config_value 'smb_share')
 # all of them.
 PATH_OPTIONS=(
     library_path:LIBRARY_PATH
+    books_path:BOOKS_PATH
     ingest_path:INGEST_PATH
     plugins_path:PLUGINS_PATH
     metadata_providers_path:PROVIDERS_PATH
@@ -247,6 +249,20 @@ if bashio::var.has_value "${CONFIG_PATH}"; then
         bashio::exit.nok "config_path must not be /config or a path under /config/ (got: ${CONFIG_PATH})"
     fi
 fi
+# books_path splits the library: metadata.db stays in library_path, the book
+# folders live in books_path. Neither may contain the other, or the book
+# folders and the database would end up mixed in one folder again.
+if bashio::var.has_value "${BOOKS_PATH}"; then
+    if [[ "${BOOKS_PATH}" != /* ]]; then
+        bashio::exit.nok "books_path must be an absolute path (got: ${BOOKS_PATH})"
+    fi
+    real_library=$(realpath -m "${LIBRARY_PATH}")
+    real_books=$(realpath -m "${BOOKS_PATH}")
+    if path_under "${real_library}" "${real_books}" \
+            || path_under "${real_books}" "${real_library}"; then
+        bashio::exit.nok "books_path (${BOOKS_PATH}) and library_path (${LIBRARY_PATH}) must be separate folders, neither inside the other. Point library_path at local storage, e.g. ${ADDON_CONFIG}/calibre-library."
+    fi
+fi
 if bashio::var.has_value "${SMB_SHARE}"; then
     if [[ ! "${SMB_SHARE}" =~ ^//[^/]+/[^/]+ ]]; then
         bashio::exit.nok "smb_share must look like //server/share (got: ${SMB_SHARE})"
@@ -288,6 +304,27 @@ fi
 mkdir -p "${ADDON_CONFIG}"
 chown_if_root "${APP_UID}:${APP_GID}" "${ADDON_CONFIG}"
 
+# With books_path set, bring over the library's metadata.db the first time
+# that books_path is used (see split_library.py `prepare`). This must run
+# before cwa-init: cwa-auto-library would otherwise find no metadata.db in
+# library_path and start a new, empty library there. The state file records
+# which books_path has been set up; init-cwa-split-library uses it to switch
+# split library mode back off once books_path is cleared.
+SPLIT_STATE=/data/.cwa-split-library
+if bashio::var.has_value "${BOOKS_PATH}"; then
+    mkdir -p "${LIBRARY_PATH}" "${BOOKS_PATH}"
+    chown_if_root "${APP_UID}:${APP_GID}" "${LIBRARY_PATH}" "${BOOKS_PATH}"
+    if ! /lsiopy/bin/python3 /opt/cwa-split-library/split_library.py prepare \
+            --library "${LIBRARY_PATH}" --books "${BOOKS_PATH}" \
+            --state "${SPLIT_STATE}"; then
+        bashio::exit.nok "Setting up books_path failed (see above)"
+    fi
+    if ! path_under /data "${LIBRARY_PATH}" \
+            && ! path_under "${ADDON_CONFIG}" "${LIBRARY_PATH}"; then
+        bashio::log.warning "books_path is set, but library_path (${LIBRARY_PATH}) is not on the add-on's local storage. It holds metadata.db, so keep it under ${ADDON_CONFIG} to get SQLite's full speed and safety."
+    fi
+fi
+
 # /config always lives on the add-on's local /data: SQLite's locking is not
 # reliable on network shares, and /data survives add-on upgrades and is part
 # of Home Assistant backups. config_path used to put /config on a share; it is
@@ -326,8 +363,10 @@ mkdir -p /run/s6/container_environment
 # On the SMB share, SQLite WAL corrupts and inotify misses files added from
 # other machines. network_share_mode handles both, so turn it on when a
 # database folder is on the share; /config always lives in /data, so that is
-# only ever the library. If only the ingest folder is there, just switch the
-# watchers to polling and keep WAL for the local databases.
+# only ever the library. With books_path, metadata.db stays in library_path and
+# only book files sit on the share, which needs neither. If only the ingest
+# folder is there, just switch the watchers to polling and keep WAL for the
+# local databases.
 NETWORK_SHARE_MODE=$(bashio::config 'network_share_mode')
 if [ "${NETWORK_SHARE_MODE}" != "true" ]; then
     if on_smb_share "${LIBRARY_PATH}"; then
@@ -372,6 +411,9 @@ fi
 
 bind_user_path "${LIBRARY_PATH}" /calibre-library
 bind_user_path "${INGEST_PATH}" /cwa-book-ingest
+if bashio::var.has_value "${BOOKS_PATH}"; then
+    bind_user_path "${BOOKS_PATH}" /calibre-books
+fi
 
 mkdir -p /config/.config/calibre
 chown_if_root "${APP_UID}:${APP_GID}" /config/.config /config/.config/calibre
@@ -397,6 +439,12 @@ if bashio::var.has_value "${PLUGINS_PATH}"; then
 fi
 
 echo -n "${NETWORK_SHARE_MODE}" > /run/s6/container_environment/NETWORK_SHARE_MODE
+# Read by init-cwa-split-library and cwa-metadata-export.
+if bashio::var.has_value "${BOOKS_PATH}"; then
+    echo -n "true" > /run/s6/container_environment/CWA_SPLIT_LIBRARY
+else
+    echo -n "false" > /run/s6/container_environment/CWA_SPLIT_LIBRARY
+fi
 # Read by init-cwa-metadata-providers.
 echo -n "${PROVIDERS_PATH}" > /run/s6/container_environment/CWA_METADATA_PROVIDERS_PATH
 echo -n "$(config_value 'hardcover_token')"    > /run/s6/container_environment/HARDCOVER_TOKEN
@@ -439,4 +487,8 @@ TZ_VALUE="${TZ:-UTC}"
 bashio::log.info "Setting TZ environment variable to ${TZ_VALUE}"
 echo -n "${TZ_VALUE}" > /run/s6/container_environment/TZ
 
-bashio::log.info "CWA paths ready: library=${LIBRARY_PATH}, ingest=${INGEST_PATH}"
+if bashio::var.has_value "${BOOKS_PATH}"; then
+    bashio::log.info "CWA paths ready: library=${LIBRARY_PATH} (metadata.db), books=${BOOKS_PATH}, ingest=${INGEST_PATH}"
+else
+    bashio::log.info "CWA paths ready: library=${LIBRARY_PATH}, ingest=${INGEST_PATH}"
+fi

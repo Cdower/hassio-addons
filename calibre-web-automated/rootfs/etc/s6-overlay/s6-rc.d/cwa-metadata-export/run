@@ -1,0 +1,20 @@
+#!/command/with-contenv bashio
+# ==============================================================================
+# One-way export of the local metadata.db into books_path
+# (`metadata_db_export`), so the folder on the NAS stays a complete Calibre
+# library. Parks idle when the option is off or books_path is not set.
+#
+# CWA's service depends on this one, so on stop s6 takes CWA down first and
+# this exporter last: its final export then sees CWA's last write.
+# ==============================================================================
+
+if ! bashio::config.true 'metadata_db_export'; then
+    exec sleep infinity
+fi
+if [ "${CWA_SPLIT_LIBRARY}" != "true" ]; then
+    bashio::log.warning "metadata_db_export only applies with books_path set — export idle"
+    exec sleep infinity
+fi
+
+exec s6-setuidgid abc /lsiopy/bin/python3 /opt/cwa-split-library/metadata_export.py \
+    --source /calibre-library/metadata.db --target-dir /calibre-books
