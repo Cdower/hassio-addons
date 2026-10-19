@@ -167,6 +167,16 @@ class PrepareTest(unittest.TestCase):
         self.assertTrue(os.path.exists(self.shared))
         self.assertFalse(os.path.exists(self.local))
 
+    def test_paths_with_uri_metacharacters(self):
+        # '#', '?' and '%' are URI syntax; the path must not be cut short.
+        self.library = os.path.join(os.path.dirname(self.library), "lib #1 ?x %41")
+        os.makedirs(self.library)
+        self.local = os.path.join(self.library, "metadata.db")
+        make_library(self.local, ["Dune"]).close()
+        self.assertEqual(self.prepare(), "kept-local")
+        self.assertEqual(sorted(os.listdir(os.path.dirname(self.library))),
+                         ["calibre-library", "lib #1 ?x %41"])
+
     def test_main_reports_failure(self):
         with open(self.shared, "wb") as fh:
             fh.write(b"SQLite format 3\x00" + b"\x01" * 4000)
@@ -237,6 +247,13 @@ class SettingsTest(unittest.TestCase):
             return con.execute("SELECT config_calibre_split FROM settings").fetchone()[0]
         finally:
             con.close()
+
+    def test_enable_fails_without_settings_row(self):
+        con = sqlite3.connect(self.db)
+        con.execute("DELETE FROM settings")
+        con.commit()
+        con.close()
+        self.assertEqual(self.main("enable", "--books-dir", "/calibre-books"), 1)
 
     def test_missing_app_db_is_not_created(self):
         os.remove(self.db)

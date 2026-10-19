@@ -31,6 +31,7 @@
 
 import argparse
 import os
+import pathlib
 import shutil
 import signal
 import sqlite3
@@ -97,6 +98,9 @@ class Schedule:
         if self.exported is None:
             return True
         if signature == self.exported:
+            # Forget the reverted change too, so if it comes back it waits
+            # the full settle time again.
+            self.seen = signature
             self.pending_since = None
             return False
         if signature != self.seen:
@@ -129,8 +133,16 @@ class Exporter:
         self.written = None
 
     def snapshot(self, path):
-        src = sqlite3.connect(f"file:{self.source}?mode=rw", uri=True, timeout=60)
+        uri = pathlib.Path(os.path.abspath(self.source)).as_uri() + "?mode=rw"
+        src = sqlite3.connect(uri, uri=True, timeout=60)
         try:
+            # Closing the last connection to a WAL database checkpoints it and
+            # deletes the -wal file, which changes db_signature() and would
+            # trigger a second, identical export. A reader has no business
+            # checkpointing CWA's database, so don't.
+            no_ckpt = getattr(sqlite3, "SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE", None)
+            if no_ckpt is not None:
+                src.setconfig(no_ckpt, True)
             dst = sqlite3.connect(path)
             try:
                 src.backup(dst)

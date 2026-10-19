@@ -262,6 +262,13 @@ if bashio::var.has_value "${BOOKS_PATH}"; then
             || path_under "${real_books}" "${real_library}"; then
         bashio::exit.nok "books_path (${BOOKS_PATH}) and library_path (${LIBRARY_PATH}) must be separate folders, neither inside the other. Point library_path at local storage, e.g. ${ADDON_CONFIG}/calibre-library."
     fi
+    # The ingest watcher consumes (and deletes) whatever lands in ingest_path,
+    # so it must never see the library's book files.
+    real_ingest=$(realpath -m "${INGEST_PATH}")
+    if path_under "${real_ingest}" "${real_books}" \
+            || path_under "${real_books}" "${real_ingest}"; then
+        bashio::exit.nok "books_path (${BOOKS_PATH}) and ingest_path (${INGEST_PATH}) must be separate folders, neither inside the other."
+    fi
 fi
 if bashio::var.has_value "${SMB_SHARE}"; then
     if [[ ! "${SMB_SHARE}" =~ ^//[^/]+/[^/]+ ]]; then

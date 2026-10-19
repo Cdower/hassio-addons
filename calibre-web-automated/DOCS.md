@@ -96,7 +96,7 @@ metadata_db_export: true                      # optional, see below
 ingest_path: /mnt/smb/cwa-book-ingest
 ```
 
-`books_path` can be any folder the add-on can reach (`/mnt/smb/...`, `/share/...` for NFS, `/media/...`). `library_path` and `books_path` must be different folders, neither inside the other.
+`books_path` can be any folder the add-on can reach (`/mnt/smb/...`, `/share/...` for NFS, `/media/...`). `books_path` must be a different folder from `library_path` and from `ingest_path`, neither inside the other.
 
 **Moving an existing library.** If your library already lives on the NAS (say `library_path: /mnt/smb/calibre-library`), set `books_path` to that folder and `library_path` back to `/addon_config/calibre-library`. Stop anything else that has the library open (Calibre desktop) first. On the first start with that `books_path`, the add-on:
 

@@ -28,6 +28,7 @@
 
 import argparse
 import os
+import pathlib
 import shutil
 import sqlite3
 import sys
@@ -73,9 +74,18 @@ def write_state(path, books_dir):
     os.replace(tmp, path)
 
 
+def connect_existing(path, timeout=30):
+    """Open the existing database at path, never creating it. The path is
+    percent-encoded into the URI: a raw '#', '?' or '%' in a folder name would
+    otherwise end the path early (and drop mode=rw, so SQLite would create a
+    stray empty file there) or decode to another name."""
+    uri = pathlib.Path(os.path.abspath(path)).as_uri() + "?mode=rw"
+    return sqlite3.connect(uri, uri=True, timeout=timeout)
+
+
 def count_books(path):
     """Number of books in the Calibre database at path."""
-    con = sqlite3.connect(f"file:{path}?mode=rw", uri=True, timeout=30)
+    con = connect_existing(path)
     try:
         if con.execute("PRAGMA quick_check").fetchone()[0] != "ok":
             raise SplitError(f"{path} is damaged (PRAGMA quick_check failed)")
@@ -217,7 +227,7 @@ def prepare(library_dir, books_dir, state_path, uid=1000, gid=1000):
 
 def open_app_db(db):
     # mode=rw: never create the file (see setup_access.py).
-    return sqlite3.connect(f"file:{db}?mode=rw", uri=True, timeout=30)
+    return connect_existing(db)
 
 
 def table_cols(con, table):
@@ -231,11 +241,14 @@ def enable(con, books_dir):
         log(f"settings table is missing columns {sorted(missing)} — cannot "
             "enable split library mode (upstream schema changed?)")
         return 1
-    con.execute(
+    cur = con.execute(
         "UPDATE settings SET config_calibre_split = 1, "
         "config_calibre_split_dir = ?",
         (books_dir,),
     )
+    if cur.rowcount < 1:
+        log("settings table has no row yet — cannot enable split library mode")
+        return 1
     con.commit()
     log(f"split library mode enabled: book files in {books_dir}")
     if "config_calibre_server_enabled" in cols:

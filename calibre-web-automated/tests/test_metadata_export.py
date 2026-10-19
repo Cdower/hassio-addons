@@ -11,6 +11,7 @@ import contextlib
 import importlib.util
 import io
 import os
+import shutil
 import signal
 import sqlite3
 import subprocess
@@ -68,6 +69,15 @@ class ScheduleTest(unittest.TestCase):
         self.assertFalse(schedule.due("a", 10))
         self.assertFalse(schedule.pending("a"))
         self.assertTrue(schedule.pending("b"))
+
+    def test_change_coming_back_after_revert_waits_to_settle(self):
+        schedule = metadata_export.Schedule(settle=60, max_delay=600)
+        schedule.done("a")
+        schedule.due("b", 0)
+        schedule.due("a", 10)
+        self.assertFalse(schedule.due("b", 20))
+        self.assertFalse(schedule.due("b", 79))
+        self.assertTrue(schedule.due("b", 80))
 
 
 class ExporterTest(unittest.TestCase):
@@ -135,6 +145,20 @@ class ExporterTest(unittest.TestCase):
         with self.quiet:
             self.exporter.export()
         self.assertNotIn("WARNING", self.out.getvalue())
+
+    def test_export_does_not_checkpoint_the_source(self):
+        # As the last connection to close, the exporter must not checkpoint
+        # CWA's WAL: that changes the source and triggers a second export.
+        # A copy of the live files is a WAL database with frames not yet
+        # checkpointed and no connection open on it.
+        source = os.path.join(self.library, "idle.db")
+        shutil.copyfile(self.source, source)
+        shutil.copyfile(self.source + "-wal", source + "-wal")
+        self.exporter.source = source
+        before = metadata_export.db_signature(source)
+        self.exporter.export()
+        self.assertEqual(metadata_export.db_signature(source), before)
+        self.assertEqual(titles(self.target), ["Dune"])
 
     def test_failed_export_keeps_previous_copy(self):
         self.exporter.export()
