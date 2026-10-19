@@ -61,6 +61,26 @@ jobs:
             done | jq --slurp --compact-output '.'
           )
           echo "builds=${builds}" >> "$GITHUB_OUTPUT"
+      - name: Check the Release workflow offers every add-on
+        env:
+          WORKFLOW: .github/workflows/release.yaml
+        run: |
+          slugs=$(
+            find . -mindepth 2 -maxdepth 2 -name config.yaml -print0 \
+              | xargs -0 yq --no-colors --output-format json eval '.slug' \
+              | jq --slurp --compact-output 'sort'
+          )
+          options=$(
+            yq --no-colors --output-format json \
+              eval '.on.workflow_dispatch.inputs.addon.options' "${WORKFLOW}" \
+              | jq --compact-output 'sort'
+          )
+          if [[ "${slugs}" != "${options}" ]]; then
+            echo "::error file=${WORKFLOW}::The addon dropdown lists ${options}," \
+                 "but the add-on slugs are ${slugs}. Update its options."
+            exit 1
+          fi
+          echo "Release dropdown matches the add-on slugs: ${slugs}"
 
   lint-app:
     name: Lint App (${{ matrix.addon }})

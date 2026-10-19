@@ -9,10 +9,15 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
+      # Keep these options in step with the add-on slugs; CI fails when an
+      # add-on is missing from the list or a listed one no longer exists.
       addon:
-        description: Add-on slug to release (e.g. calibre-web-automated)
+        description: Add-on to release
         required: true
-        type: string
+        type: choice
+        options:
+          - acpro-thermostat
+          - calibre-web-automated
       prerelease:
         description: Mark the GitHub release as a pre-release
         required: false
