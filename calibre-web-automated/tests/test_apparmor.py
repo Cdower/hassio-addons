@@ -3,7 +3,9 @@
 #
 # Every mount init-cwa-paths makes must be allowed by apparmor.txt, or it is
 # refused at runtime on AppArmor hosts (HAOS) only. Checks the bind-mount
-# targets and the SMB mount point against the profile's mount rules.
+# targets and the SMB mount point against the profile's mount rules, and that
+# the capability mount.cifs needs is granted in config.yaml but denied by the
+# profile.
 #
 # Run directly:   python3 calibre-web-automated/tests/test_apparmor.py
 # Or via pytest:  pytest calibre-web-automated/tests/test_apparmor.py
@@ -60,9 +62,12 @@ class SmbCapabilitiesTest(unittest.TestCase):
     # is what open_by_handle_at, the "Shocker" container escape, checks for).
     def test_mount_cifs_can_raise_dac_read_search(self):
         config = read(os.path.join(ADDON_ROOT, "config.yaml"))
-        block = re.search(r"^privileged:\n((?:\s+-\s*\S+\n)+)", config, re.M)
+        # Items may carry a trailing comment or whitespace.
+        block = re.search(
+            r"^privileged:\n((?:[ \t]+-[ \t]*\S+[ \t]*(?:#.*)?\n)+)", config, re.M,
+        )
         self.assertIsNotNone(block, "no privileged list in config.yaml")
-        caps = re.findall(r"-\s*(\S+)", block.group(1))
+        caps = re.findall(r"^[ \t]+-[ \t]*([^\s#]+)", block.group(1), re.M)
         self.assertIn("SYS_ADMIN", caps)
         self.assertIn("DAC_READ_SEARCH", caps)
 

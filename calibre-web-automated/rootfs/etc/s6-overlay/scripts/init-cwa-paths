@@ -91,7 +91,9 @@ bind_user_path() {
 # 0755 and offers no way to change that, so `abc` cannot write to them; mounting
 # the share here lets us choose the owner. The password goes through a
 # credentials file rather than the mount options, so it never appears in
-# /proc/mounts or a process listing.
+# /proc/mounts or a process listing. Requires privileged: [SYS_ADMIN,
+# DAC_READ_SEARCH] in config.yaml (mount.cifs refuses to start without the
+# latter) and the cifs mount rule in apparmor.txt.
 mount_smb_share() {
     local opts cred="" err="" attempt version username domain
 
