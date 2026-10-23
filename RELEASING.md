@@ -77,6 +77,11 @@ With neither, the workflow still pushes the bump branch and starts CI on it,
 then finishes with a warning and a link in the job summary that opens the PR
 with its title and body already filled in.
 
+The weekly **Tailscale** workflow, which opens PRs that update the Tailscale
+client bundled into calibre-web-automated, uses the same token and the same
+fallback. Until its PR is open, each scheduled run pushes the branch again and
+repeats the link.
+
 ## CI on bump PRs
 
 Merging needs the required `CI` check, and a branch pushed with the default

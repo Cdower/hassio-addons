@@ -1,0 +1,251 @@
+---
+name: Tailscale
+
+# Keeps the Tailscale client bundled into calibre-web-automated current.
+# Dependabot and Renovate can't do this: the Dockerfile pins a plain tarball
+# download plus a sha256 per architecture, and neither tool can recompute
+# those hashes. Once a week this checks Tailscale's stable channel; when it is
+# newer than the Dockerfile's TAILSCALE_VERSION, it downloads both tarballs,
+# verifies Tailscale's distsign signatures on them against the root keys
+# committed in .github/tailscale/roots (see the README there), checks them
+# against the published .sha256 files, and opens (or refreshes) a PR from the
+# deps/tailscale branch that updates the version, both hashes and the
+# changelog.
+
+# yamllint disable-line rule:truthy
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Show the diff without pushing a branch or opening a PR
+        required: false
+        default: false
+        type: boolean
+
+permissions: {}
+
+concurrency:
+  group: tailscale
+  cancel-in-progress: false
+
+env:
+  ADDON: calibre-web-automated
+  BRANCH: deps/tailscale
+
+jobs:
+  update:
+    name: Update Tailscale
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+          # Credentials are kept because this job pushes the update branch.
+          # A push made with GITHUB_TOKEN triggers no workflows, so prefer a
+          # BUMP_TOKEN PAT when one is configured. Without it the PR step
+          # dispatches CI by hand, as the Bump workflow does.
+          # zizmor: ignore[artipacked] - the pushed branch is the deliverable
+          token: ${{ secrets.BUMP_TOKEN || secrets.GITHUB_TOKEN }}
+      - name: Compare with the latest stable release
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          current=$(sed -n 's/^ARG TAILSCALE_VERSION="\([^"]*\)"$/\1/p' "${ADDON}/Dockerfile")
+          if [[ -z "${current}" ]]; then
+            echo "::error file=${ADDON}/Dockerfile::No TAILSCALE_VERSION ARG found"
+            exit 1
+          fi
+          latest=$(
+            curl --fail --silent --show-error --location --retry 3 \
+              "https://pkgs.tailscale.com/stable/?mode=json" \
+              | jq --raw-output '.TarballsVersion'
+          )
+          if [[ ! "${latest}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Unexpected TarballsVersion '${latest}' from pkgs.tailscale.com"
+            exit 1
+          fi
+
+          newest=$(printf '%s\n%s\n' "${current}" "${latest}" | sort --version-sort | tail -1)
+          update=false
+          if [[ "${latest}" == "${current}" || "${newest}" != "${latest}" ]]; then
+            echo "::notice::Tailscale ${current} is current (stable is ${latest})"
+          # Skip only while an open PR already carries this version. A pushed
+          # branch with no PR (Actions may not be allowed to open one) is
+          # pushed again, so the job summary link comes back every week.
+          elif git rev-parse --verify --quiet "refs/remotes/origin/${BRANCH}" > /dev/null \
+              && [[ "$(git show "origin/${BRANCH}:${ADDON}/Dockerfile")" == *"ARG TAILSCALE_VERSION=\"${latest}\""* ]] \
+              && [[ -n "$(gh pr list --head "${BRANCH}" --state open --json number --jq '.[0].number')" ]]; then
+            echo "::notice::An open PR from ${BRANCH} already updates Tailscale to ${latest}"
+          else
+            update=true
+          fi
+          {
+            echo "current=${current}"
+            echo "latest=${latest}"
+            echo "update=${update}"
+          } >> "$GITHUB_OUTPUT"
+      - name: Download and verify the tarballs
+        id: verify
+        if: ${{ steps.check.outputs.update == 'true' }}
+        env:
+          VERSION: ${{ steps.check.outputs.latest }}
+        run: |
+          set -euo pipefail
+          download() {
+            curl --fail --silent --show-error --location --retry 3 --output "$1" "$2"
+          }
+          cd "${RUNNER_TEMP}"
+
+          # Signing keys come from the server, but must be signed by one of
+          # the root keys committed in .github/tailscale/roots.
+          download distsign.pub https://pkgs.tailscale.com/distsign.pub
+          download distsign.pub.sig https://pkgs.tailscale.com/distsign.pub.sig
+
+          tarballs=()
+          for arch in amd64 arm64; do
+            tarball="tailscale_${VERSION}_${arch}.tgz"
+            url="https://pkgs.tailscale.com/stable/${tarball}"
+            download "${tarball}" "${url}"
+            download "${tarball}.sig" "${url}.sig"
+            download "${tarball}.sha256" "${url}.sha256"
+            tarballs+=("${tarball}")
+          done
+
+          # Proves the tarballs were signed by Tailscale, before anything
+          # else looks inside them or their hashes are pinned.
+          python3 -I "${GITHUB_WORKSPACE}/.github/scripts/verify-tailscale.py" \
+            "${GITHUB_WORKSPACE}/.github/tailscale/roots" distsign.pub "${tarballs[@]}"
+
+          for arch in amd64 arm64; do
+            tarball="tailscale_${VERSION}_${arch}.tgz"
+            computed=$(sha256sum "${tarball}" | cut --delimiter=' ' --fields=1)
+            published=$(tr --delete '[:space:]' < "${tarball}.sha256")
+            if [[ "${computed}" != "${published}" ]]; then
+              echo "::error::${tarball} hashes to ${computed}, but its published .sha256 says ${published}"
+              exit 1
+            fi
+
+            # The Dockerfile strips the top directory and links these two.
+            # List once into a variable: piping tar into grep --quiet would
+            # kill tar with SIGPIPE on the first match, which pipefail fails.
+            contents=$(tar --list --gzip --file "${tarball}")
+            for binary in tailscale tailscaled; do
+              if ! grep --quiet --line-regexp "[^/]*/${binary}" <<< "${contents}"; then
+                echo "::error::${tarball} has no ${binary} binary at its top level"
+                exit 1
+              fi
+            done
+            echo "${arch}=${computed}" >> "$GITHUB_OUTPUT"
+          done
+      - name: Apply the update
+        id: apply
+        if: ${{ steps.check.outputs.update == 'true' }}
+        env:
+          VERSION: ${{ steps.check.outputs.latest }}
+          SHA256_AMD64: ${{ steps.verify.outputs.amd64 }}
+          SHA256_ARM64: ${{ steps.verify.outputs.arm64 }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/update-tailscale.py
+          {
+            echo '### Tailscale update diff'
+            echo '```diff'
+            git --no-pager diff
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Open or refresh the PR
+        if: ${{ steps.check.outputs.update == 'true' && !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ secrets.BUMP_TOKEN || secrets.GITHUB_TOKEN }}
+          PREVIOUS: ${{ steps.check.outputs.current }}
+          VERSION: ${{ steps.check.outputs.latest }}
+          HAVE_PAT: ${{ secrets.BUMP_TOKEN != '' }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch --force-create "${BRANCH}"
+          git commit --quiet --all --message "${ADDON}: update Tailscale to ${VERSION}"
+          # The branch belongs to this workflow and is rebuilt from the default
+          # branch each time, so an older, unmerged update is replaced.
+          git push --quiet --force origin "${BRANCH}"
+
+          ci_dispatched=false
+          if [[ "${HAVE_PAT}" != "true" ]]; then
+            gh workflow run ci.yaml --ref "${BRANCH}"
+            ci_dispatched=true
+          fi
+
+          title="${ADDON}: update Tailscale to ${VERSION}"
+          body="${RUNNER_TEMP}/pr-body.md"
+          {
+            echo "Updates the Tailscale client bundled into \`${ADDON}\`" \
+                 "from ${PREVIOUS} to ${VERSION}."
+            echo
+            echo "- \`${ADDON}/Dockerfile\`: \`TAILSCALE_VERSION\` and both" \
+                 "per-arch sha256 pins. Both tarballs were downloaded from" \
+                 "pkgs.tailscale.com, carry a valid Tailscale distsign" \
+                 "signature (checked against the root keys committed in" \
+                 "\`.github/tailscale/roots\`), and match the published" \
+                 "\`.sha256\` files."
+            echo "- \`${ADDON}/CHANGELOG.md\`: entry under Unreleased."
+            echo
+            echo "Release notes: https://tailscale.com/changelog"
+            if [[ "${ci_dispatched}" == "true" ]]; then
+              echo
+              echo "CI was started by hand on this branch, because the push came" \
+                   "from \`GITHUB_TOKEN\` and so triggered nothing. It reports" \
+                   "against this same commit, so the required check still applies."
+            fi
+          } > "${body}"
+
+          existing=$(gh pr list --head "${BRANCH}" --state open --json number --jq '.[0].number')
+          if [[ -n "${existing}" ]]; then
+            gh pr edit "${existing}" --title "${title}" --body-file "${body}"
+            exit 0
+          fi
+          error="${RUNNER_TEMP}/pr-create.err"
+          if gh pr create \
+               --base "${GITHUB_REF_NAME}" \
+               --head "${BRANCH}" \
+               --title "${title}" \
+               --body-file "${body}" 2> "${error}"; then
+            exit 0
+          fi
+          cat "${error}" >&2
+
+          # Unless the repository allows it, GITHUB_TOKEN may push but not open
+          # PRs. As in the Bump workflow, hand over a prefilled link instead of
+          # failing; the next scheduled run pushes and links again until a PR
+          # is open.
+          if ! grep --quiet 'not permitted to create or approve pull requests' "${error}"; then
+            exit 1
+          fi
+          url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/compare/${GITHUB_REF_NAME}...${BRANCH}?quick_pull=1"
+          url+="&title=$(jq --raw-input --raw-output '@uri' <<< "${title}")"
+          url+="&body=$(jq --raw-input --raw-output --slurp '@uri' < "${body}")"
+          echo "::warning::GitHub Actions may not open PRs in this repository." \
+               "${BRANCH} is pushed; open its PR from the link in the job summary." \
+               "See RELEASING.md to let the workflow open it next time."
+          {
+            echo '### Open the Tailscale update PR'
+            echo
+            echo "GitHub Actions is not permitted to create pull requests here," \
+                 "so \`${BRANCH}\` was pushed but no PR was opened."
+            echo
+            echo "**[Open the PR for \`${BRANCH}\`](${url})** — title and body are prefilled."
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Report a dry run
+        if: ${{ steps.check.outputs.update == 'true' && inputs.dry_run }}
+        run: |
+          echo "::notice::Dry run: would push ${BRANCH} and open a PR." \
+               "The diff is in the job summary."
