@@ -6,9 +6,11 @@ name: Tailscale
 # download plus a sha256 per architecture, and neither tool can recompute
 # those hashes. Once a week this checks Tailscale's stable channel; when it is
 # newer than the Dockerfile's TAILSCALE_VERSION, it downloads both tarballs,
-# checks them against the published .sha256 files, and opens (or refreshes)
-# a PR from the deps/tailscale branch that updates the version, both hashes
-# and the changelog.
+# verifies Tailscale's distsign signatures on them against the root keys
+# committed in .github/tailscale/roots (see the README there), checks them
+# against the published .sha256 files, and opens (or refreshes) a PR from the
+# deps/tailscale branch that updates the version, both hashes and the
+# changelog.
 
 # yamllint disable-line rule:truthy
 on:
@@ -98,17 +100,37 @@ jobs:
           VERSION: ${{ steps.check.outputs.latest }}
         run: |
           set -euo pipefail
+          download() {
+            curl --fail --silent --show-error --location --retry 3 --output "$1" "$2"
+          }
           cd "${RUNNER_TEMP}"
+
+          # Signing keys come from the server, but must be signed by one of
+          # the root keys committed in .github/tailscale/roots.
+          download distsign.pub https://pkgs.tailscale.com/distsign.pub
+          download distsign.pub.sig https://pkgs.tailscale.com/distsign.pub.sig
+
+          tarballs=()
           for arch in amd64 arm64; do
             tarball="tailscale_${VERSION}_${arch}.tgz"
             url="https://pkgs.tailscale.com/stable/${tarball}"
-            curl --fail --silent --show-error --location --retry 3 --output "${tarball}" "${url}"
-            curl --fail --silent --show-error --location --retry 3 --output "${tarball}.sha256" "${url}.sha256"
+            download "${tarball}" "${url}"
+            download "${tarball}.sig" "${url}.sig"
+            download "${tarball}.sha256" "${url}.sha256"
+            tarballs+=("${tarball}")
+          done
 
+          # Proves the tarballs were signed by Tailscale, before anything
+          # else looks inside them or their hashes are pinned.
+          python3 -I "${GITHUB_WORKSPACE}/.github/scripts/verify-tailscale.py" \
+            "${GITHUB_WORKSPACE}/.github/tailscale/roots" distsign.pub "${tarballs[@]}"
+
+          for arch in amd64 arm64; do
+            tarball="tailscale_${VERSION}_${arch}.tgz"
             computed=$(sha256sum "${tarball}" | cut --delimiter=' ' --fields=1)
             published=$(tr --delete '[:space:]' < "${tarball}.sha256")
             if [[ "${computed}" != "${published}" ]]; then
-              echo "::error::${tarball} hashes to ${computed}, but ${url}.sha256 says ${published}"
+              echo "::error::${tarball} hashes to ${computed}, but its published .sha256 says ${published}"
               exit 1
             fi
 
@@ -171,7 +193,10 @@ jobs:
             echo
             echo "- \`${ADDON}/Dockerfile\`: \`TAILSCALE_VERSION\` and both" \
                  "per-arch sha256 pins. Both tarballs were downloaded from" \
-                 "pkgs.tailscale.com and match its published \`.sha256\` files."
+                 "pkgs.tailscale.com, carry a valid Tailscale distsign" \
+                 "signature (checked against the root keys committed in" \
+                 "\`.github/tailscale/roots\`), and match the published" \
+                 "\`.sha256\` files."
             echo "- \`${ADDON}/CHANGELOG.md\`: entry under Unreleased."
             echo
             echo "Release notes: https://tailscale.com/changelog"
