@@ -175,6 +175,9 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # Sign (OIDC token) and record the build provenance attestation.
+      id-token: write
+      attestations: write
     runs-on: ${{ matrix.architecture == 'aarch64' && 'ubuntu-26.04-arm' || 'ubuntu-26.04' }}
     strategy:
       fail-fast: false
@@ -222,6 +225,7 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build & push
+        id: build
         uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
         with:
           push: true
@@ -243,3 +247,14 @@ jobs:
             BUILD_REF=${{ steps.commit.outputs.sha }}
             BUILD_REPOSITORY=${{ github.repository }}
             BUILD_VERSION=${{ needs.discover.outputs.version }}
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          # No tag: the digest identifies the image, so both `:<version>` and
+          # `:latest` are covered by the one attestation.
+          subject-name: ghcr.io/${{ needs.discover.outputs.owner }}/${{ matrix.architecture }}-hassio-addon-${{ steps.info.outputs.slug }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+          # Storage records are only available to organization-owned
+          # repositories; this one is user-owned, so the API call would fail.
+          create-storage-record: false

@@ -190,9 +190,13 @@ jobs:
     name: Publish images
     needs: release
     if: ${{ !inputs.dry_run }}
+    # A called workflow gets no more than its caller grants, so these must
+    # cover everything deploy.yaml's jobs ask for, attestation included.
     permissions:
       contents: read
       packages: write
+      id-token: write
+      attestations: write
     # actionlint does not accept the `$/` self-repository syntax zizmor asks for
     # yet, so keep the workspace-relative form until it does.
     uses: ./.github/workflows/deploy.yaml  # zizmor: ignore[self-repository]

@@ -56,6 +56,23 @@ Creating the release by hand instead of running the workflow also works: the
 `Deploy` workflow reacts to any published release, and takes the add-on and
 version from the tag. Just make sure the tag follows the convention above.
 
+## Build provenance
+
+Every image `Deploy` pushes gets a signed [SLSA build provenance
+attestation][attest], stored with the repository and pushed to GHCR next to
+the image. It ties the image digest to the workflow run, commit and repository
+that built it. Check one with the GitHub CLI:
+
+```bash
+gh attestation verify oci://ghcr.io/cdower/aarch64-hassio-addon-calibre-web-automated:4.0.6.11 --repo Cdower/hassio-addons
+```
+
+The attestation names the image without a tag and pins the digest, so
+`:<version>` and `:latest` verify against the same one. Images pushed before
+this was added have none.
+
+[attest]: https://github.com/actions/attest-build-provenance
+
 ## Republishing without a release
 
 To rebuild and push images without cutting a new release — a base image moved,
