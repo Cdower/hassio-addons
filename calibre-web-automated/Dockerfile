@@ -1,4 +1,12 @@
 ARG BUILD_FROM="ghcr.io/new-usemame/calibre-web-nextgen:v4.1.58"
+
+# uv (https://docs.astral.sh/uv/) installs the add-on's Python dependencies
+# from pyproject.toml / uv.lock. This stage only supplies the binary, which is
+# bind-mounted into the one RUN step that needs it: nothing from it is in the
+# released image. Pinned by tag and digest; Dependabot moves both. Keep the
+# version in step with the uv set up in .github/workflows/ci.yaml.
+FROM ghcr.io/astral-sh/uv:0.13.6@sha256:af22a52f5eafef3d78e551599d405c02df61919d18028f0cea8eda93bc9986d0 AS uv
+
 # hadolint ignore=DL3006
 FROM ${BUILD_FROM}
 
@@ -69,16 +77,26 @@ RUN \
 
 # nginx + PyJWT power the optional Cloudflare Access mode: nginx fronts CWA
 # (LAN header-stripping listener on 8083, JWT-gated listener on 8085) and the
-# verifier validates Cf-Access-Jwt-Assertion with PyJWT. PyJWT rides the
-# /lsiopy venv, whose `cryptography` (upstream pyproject.toml) provides the
-# RS256 backend. Ubuntu's nginx-core includes http_auth_request_module.
-ARG PYJWT_VERSION="2.10.1"
+# verifier validates Cf-Access-Jwt-Assertion with PyJWT. Ubuntu's nginx-core
+# includes http_auth_request_module.
+#
+# PyJWT is the add-on's own Python dependency: pyproject.toml declares it and
+# uv.lock pins it, so `uv export` of the lock is a hash-pinned requirements
+# file that uv installs into the base image's /lsiopy venv, whose
+# `cryptography` (upstream pyproject.toml) provides the RS256 backend.
+# `--no-default-groups` leaves out the `test` dependency group (pytest and
+# the cryptography/werkzeug pins CI needs), which never reaches the image.
+COPY pyproject.toml uv.lock /tmp/cwa-addon/
 # hadolint ignore=DL3008
-RUN \
+RUN --mount=type=bind,from=uv,source=/uv,target=/usr/local/bin/uv \
     apt-get update \
     && apt-get install -y --no-install-recommends nginx \
     && rm -rf /var/lib/apt/lists/* /etc/nginx/sites-enabled/default \
-    && /lsiopy/bin/pip install --no-cache-dir "PyJWT==${PYJWT_VERSION}"
+    && uv export --project /tmp/cwa-addon --frozen --no-default-groups \
+        --no-emit-project --output-file /tmp/cwa-addon/requirements.txt \
+    && uv pip install --python /lsiopy/bin/python3 --no-cache \
+        --require-hashes --requirements /tmp/cwa-addon/requirements.txt \
+    && rm -rf /tmp/cwa-addon
 
 # cifs-utils provides mount.cifs for the optional `smb_share` option: the
 # add-on mounts the share itself so it can choose the files' owner (Home

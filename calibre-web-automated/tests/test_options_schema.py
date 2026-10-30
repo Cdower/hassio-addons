@@ -30,7 +30,7 @@ def block(name):
     """The top-level `name:` mapping from config.yaml, as {option: raw value}.
 
     Reads config.yaml with regexes rather than PyYAML, which the test
-    environment does not install (see requirements.txt). A list option
+    environment does not install (see pyproject.toml). A list option
     (`access_users`) carries its type on the following `- <type>` line and
     comes back as that element type, because that is what the Supervisor
     checks a missing list option against.
