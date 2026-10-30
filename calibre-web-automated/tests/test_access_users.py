@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # SPDX-License-Identifier: MIT
 #
 # Offline tests for the Cloudflare Access app.db reconciler
@@ -151,18 +150,14 @@ class SetupAccessTest(unittest.TestCase):
         )
         # Password must be non-empty (unusable random hash) or '' fallback —
         # never a guessable value. With werkzeug installed we expect a hash.
-        (password,) = self._query(
-            "SELECT password FROM user WHERE name = 'alice@gmail.com'"
-        )[0]
+        (password,) = self._query("SELECT password FROM user WHERE name = 'alice@gmail.com'")[0]
         self.assertTrue(password == "" or ":" in password)
 
     def test_enable_is_idempotent_and_case_insensitive(self):
         _make_db(self.db)
         self.assertEqual(_run("enable", self.db, ["alice@gmail.com"]), 0)
         self.assertEqual(_run("enable", self.db, ["ALICE@gmail.com"]), 0)
-        (count,) = self._query(
-            "SELECT COUNT(*) FROM user WHERE lower(name) = 'alice@gmail.com'"
-        )[0]
+        (count,) = self._query("SELECT COUNT(*) FROM user WHERE lower(name) = 'alice@gmail.com'")[0]
         self.assertEqual(count, 1)
 
     def test_invalid_emails_skipped(self):
@@ -204,9 +199,7 @@ class SetupAccessTest(unittest.TestCase):
         con.close()
         rc = _run("enable", self.db, ["alice@gmail.com"])
         self.assertEqual(rc, 0)  # never blocks startup
-        (flag,) = self._query(
-            "SELECT config_allow_reverse_proxy_header_login FROM settings"
-        )[0]
+        (flag,) = self._query("SELECT config_allow_reverse_proxy_header_login FROM settings")[0]
         self.assertEqual(flag, 1)
         rows = self._query("SELECT name FROM user WHERE name != 'admin'")
         self.assertEqual(rows, [])
@@ -215,8 +208,7 @@ class SetupAccessTest(unittest.TestCase):
         _make_db(self.db)
         con = sqlite3.connect(self.db)
         con.execute(
-            "ALTER TABLE settings RENAME COLUMN "
-            "config_allow_reverse_proxy_header_login TO nope"
+            "ALTER TABLE settings RENAME COLUMN config_allow_reverse_proxy_header_login TO nope"
         )
         con.commit()
         con.close()
@@ -229,9 +221,7 @@ class SetupAccessTest(unittest.TestCase):
         _make_db(self.db)
         self.assertEqual(_run("enable", self.db), 0)
         self.assertEqual(_run("disable", self.db), 0)
-        (flag,) = self._query(
-            "SELECT config_allow_reverse_proxy_header_login FROM settings"
-        )[0]
+        (flag,) = self._query("SELECT config_allow_reverse_proxy_header_login FROM settings")[0]
         self.assertEqual(flag, 0)
 
     def test_warn_if_enabled_never_fails(self):

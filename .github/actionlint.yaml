@@ -1,0 +1,8 @@
+---
+# Configuration for actionlint (run by prek, see prek.toml).
+self-hosted-runner:
+  # Not self-hosted: these are GitHub-hosted labels that the actionlint pinned
+  # in prek.toml does not know yet. Drop them once a release lists them.
+  labels:
+    - ubuntu-26.04
+    - ubuntu-26.04-arm

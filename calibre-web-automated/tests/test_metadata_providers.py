@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # SPDX-License-Identifier: MIT
 #
 # Offline tests for the custom metadata-provider installer
@@ -20,7 +19,11 @@ import unittest
 HERE = os.path.dirname(os.path.abspath(__file__))
 ADDON_ROOT = os.path.dirname(HERE)
 INSTALLER_PATH = os.path.join(
-    ADDON_ROOT, "rootfs", "opt", "cwa-metadata-providers", "install_providers.py",
+    ADDON_ROOT,
+    "rootfs",
+    "opt",
+    "cwa-metadata-providers",
+    "install_providers.py",
 )
 
 spec = importlib.util.spec_from_file_location("cwa_install_providers", INSTALLER_PATH)
@@ -61,7 +64,8 @@ class InstallProvidersTest(unittest.TestCase):
         with contextlib.redirect_stdout(out):
             installed = installer.install(
                 self.source if source == "default" else source,
-                self.dest, self.manifest,
+                self.dest,
+                self.manifest,
             )
         return installed, out.getvalue()
 
@@ -91,8 +95,14 @@ class InstallProvidersTest(unittest.TestCase):
         self.assertEqual(installed, [])
 
     def test_skips_invalid_and_non_python_files(self):
-        for name in ("__init__.py", "my-source.py", "1st.py", "notes.txt",
-                     "._my_source.py", ".hidden.py"):
+        for name in (
+            "__init__.py",
+            "my-source.py",
+            "1st.py",
+            "notes.txt",
+            "._my_source.py",
+            ".hidden.py",
+        ):
             write(os.path.join(self.source, name), "# x\n")
         os.makedirs(os.path.join(self.source, "subdir.py"))
         installed, _ = self.run_install()
@@ -144,10 +154,16 @@ class InstallProvidersTest(unittest.TestCase):
     def test_main_rejects_missing_source(self):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            rc = installer.main([
-                "--source", os.path.join(self.source, "missing"),
-                "--dest", self.dest, "--manifest", self.manifest,
-            ])
+            rc = installer.main(
+                [
+                    "--source",
+                    os.path.join(self.source, "missing"),
+                    "--dest",
+                    self.dest,
+                    "--manifest",
+                    self.manifest,
+                ]
+            )
         self.assertEqual(rc, 1)
 
 

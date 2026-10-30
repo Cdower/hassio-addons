@@ -3,6 +3,7 @@
 Shared by update-tailscale.py and update-base-image.py, which run with
 `python3 -I` and so import it by putting this directory on sys.path first.
 """
+
 import re
 import sys
 
@@ -20,9 +21,7 @@ def add_or_update(changelog, pattern, replacement, line):
     with open(changelog, encoding="utf-8") as handle:
         lines = handle.read().splitlines()
 
-    unreleased = next(
-        (i for i, text in enumerate(lines) if UNRELEASED.match(text)), None
-    )
+    unreleased = next((i for i, text in enumerate(lines) if UNRELEASED.match(text)), None)
     if unreleased is None:
         sys.exit(f"::error::No Unreleased section in {changelog}")
     end = next(
@@ -30,9 +29,7 @@ def add_or_update(changelog, pattern, replacement, line):
         len(lines),
     )
 
-    existing = next(
-        (i for i in range(unreleased + 1, end) if pattern.match(lines[i])), None
-    )
+    existing = next((i for i in range(unreleased + 1, end) if pattern.match(lines[i])), None)
     if existing is not None:
         lines[existing] = pattern.sub(replacement, lines[existing])
     else:
@@ -50,13 +47,11 @@ def add_or_update(changelog, pattern, replacement, line):
                 (i for i in range(changed + 1, stop) if lines[i].strip()),
                 default=changed + 1,
             )
-            lines[last + 1:last + 1] = [line]
+            lines[last + 1 : last + 1] = [line]
         else:
             # Keep a Changelog orders Changed after Added and before the rest.
             later = ("### Deprecated", "### Removed", "### Fixed", "### Security")
-            at = next(
-                (i for i in range(unreleased + 1, end) if lines[i] in later), end
-            )
+            at = next((i for i in range(unreleased + 1, end) if lines[i] in later), end)
             lines[at:at] = ["### Changed", "", line, ""]
             if lines[at - 1].strip():
                 lines[at:at] = [""]

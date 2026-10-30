@@ -8,6 +8,7 @@ earlier one that has not been released yet), that entry's target version is
 moved forward instead of adding a second line. Used by
 .github/workflows/tailscale.yaml.
 """
+
 import os
 import re
 import sys
@@ -32,9 +33,7 @@ if current is None:
 previous = current.group(1)
 
 for name, value in {"TAILSCALE_VERSION": version, **hashes}.items():
-    text, count = re.subn(
-        rf'(?m)^ARG {name}="[^"]*"$', f'ARG {name}="{value}"', text, count=1
-    )
+    text, count = re.subn(rf'(?m)^ARG {name}="[^"]*"$', f'ARG {name}="{value}"', text, count=1)
     if count != 1:
         sys.exit(f"::error::No {name} ARG found in {dockerfile}")
 with open(dockerfile, "w", encoding="utf-8") as handle:

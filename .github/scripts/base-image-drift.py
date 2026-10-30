@@ -15,36 +15,33 @@ keep the two in step, and NOTES in step with the add-on's "verified against"
 comments. A change here does not mean the add-on breaks, only that the bump
 needs that skill's review before it is merged.
 """
+
 import os
 import subprocess
 import sys
 
 WATCHED = {
     "root/": "s6 services. `svc-calibre-web-automated/run` is overridden by the"
-             " add-on (`-i $CWA_BIND_ADDRESS`), `cwa-init` and"
-             " `cwa-auto-library` are dependencies of the add-on's oneshots,"
-             " and a new service may need AppArmor rules",
+    " add-on (`-i $CWA_BIND_ADDRESS`), `cwa-init` and"
+    " `cwa-auto-library` are dependencies of the add-on's oneshots,"
+    " and a new service may need AppArmor rules",
     "Dockerfile": "the `/lsiopy` venv the add-on pip-installs PyJWT into",
     "pyproject.toml": "`cryptography` and `werkzeug` in `/lsiopy`",
     "cps/cli.py": "the `-i` bind-address flag",
     "cps/constants.py": "`CWA_PORT_OVERRIDE`",
     "cps/__init__.py": "`TRUSTED_PROXY_COUNT` / ProxyFix",
-    "cps/config_sql.py": "reverse-proxy header login and split library"
-                         " settings the add-on writes",
+    "cps/config_sql.py": "reverse-proxy header login and split library settings the add-on writes",
     "cps/usermanagement.py": "new-user defaults `setup_access.py` mirrors",
     "cps/ub.py": "`user` / `settings` schema and migrations"
-                 " `setup_access.py` and its test fixtures follow",
-    "cps/search_metadata.py": "metadata provider discovery"
-                              " `install_providers.py` relies on",
-    "cps/services/Metadata.py": "the contract the add-on's arXiv provider"
-                                " implements",
+    " `setup_access.py` and its test fixtures follow",
+    "cps/search_metadata.py": "metadata provider discovery `install_providers.py` relies on",
+    "cps/services/Metadata.py": "the contract the add-on's arXiv provider implements",
     "cps/metadata_provider/arxiv.py": "fully replaced by the add-on's own"
-                                      " arXiv provider, which would drop"
-                                      " upstream's changes",
+    " arXiv provider, which would drop"
+    " upstream's changes",
     "cps/content_server.py": "split library mode support",
     "scripts/ingest_processor.py": "split library mode in ingest",
-    "scripts/auto_library.py": "must only look for metadata.db under"
-                               " `/calibre-library`",
+    "scripts/auto_library.py": "must only look for metadata.db under `/calibre-library`",
 }
 
 DATABASE = r"/config/[A-Za-z0-9_./-]*\.(db|sqlite[0-9]?)"
@@ -61,7 +58,9 @@ NOTES = {
 
 def git(*args, ok=(0,)):
     result = subprocess.run(
-        ["git", "-C", upstream, *args], capture_output=True, text=True,
+        ["git", "-C", upstream, *args],
+        capture_output=True,
+        text=True,
     )
     if result.returncode not in ok:
         sys.exit(f"::error::git {' '.join(args)} failed: {result.stderr.strip()}")
@@ -70,8 +69,9 @@ def git(*args, ok=(0,)):
 
 def databases(tag):
     # git grep exits 1 when nothing matches, which is not an error here.
-    return set(git("grep", "-ohE", DATABASE, tag, "--", "cps", "scripts", "root",
-                   ok=(0, 1)).split())
+    return set(
+        git("grep", "-ohE", DATABASE, tag, "--", "cps", "scripts", "root", ok=(0, 1)).split()
+    )
 
 
 upstream, old, new, report = sys.argv[1:5]
@@ -89,8 +89,13 @@ for path, why in WATCHED.items():
         findings.append(f"`{path}` ({stat}): {why}.")
 
 added = git(
-    "diff", "--name-only", "--diff-filter=A", old, new,
-    "--", "cps/metadata_provider/",
+    "diff",
+    "--name-only",
+    "--diff-filter=A",
+    old,
+    new,
+    "--",
+    "cps/metadata_provider/",
 ).split()
 if added:
     names = ", ".join(f"`{os.path.basename(name)}`" for name in added)
@@ -131,12 +136,12 @@ with open(report, "w", encoding="utf-8") as handle:
         )
     if refresh:
         handle.write(
-            f"\nThe \"verified against\" notes in {', '.join(f'`{n}`' for n in refresh)}"
+            f'\nThe "verified against" notes in {", ".join(f"`{n}`" for n in refresh)}'
             f" were moved to {new}: what they cover did not change.\n"
         )
     if kept:
         handle.write(
-            f"\nThe \"verified against\" notes in {', '.join(f'`{n}`' for n in kept)}"
+            f'\nThe "verified against" notes in {", ".join(f"`{n}`" for n in kept)}'
             f" still name {old}, for the review to move.\n"
         )
 

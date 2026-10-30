@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # SPDX-License-Identifier: MIT
 #
 # Guard rail for config.yaml's options schema: an option added after the
@@ -38,7 +37,7 @@ def block(name):
     """
     with open(CONFIG, encoding="utf-8") as fh:
         text = fh.read()
-    body = re.search(rf"^{name}:\n((?:[ \t].*\n|\n)*)", text, re.M)
+    body = re.search(rf"^{name}:\n((?:[ \t].*\n|\n)*)", text, re.MULTILINE)
     assert body, f"no {name}: block in {CONFIG}"
     entries = {}
     key = None
@@ -90,9 +89,7 @@ class OptionsSchemaTest(unittest.TestCase):
         # option must be in it or the add-on is unsaveable out of the box.
         for option in REQUIRED_SINCE_FIRST_RELEASE:
             self.assertIn(option, self.schema, f"{option} is no longer in the schema")
-            self.assertIn(
-                option, self.options, f"{option} is required but has no default"
-            )
+            self.assertIn(option, self.options, f"{option} is required but has no default")
 
     def test_every_default_is_a_known_option(self):
         for option in self.options:

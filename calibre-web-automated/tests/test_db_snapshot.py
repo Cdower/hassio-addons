@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # SPDX-License-Identifier: MIT
 #
 # Offline tests for the backup snapshot helper
@@ -84,13 +83,17 @@ class DbSnapshotTest(unittest.TestCase):
         self.make_db(os.path.join(self.data, "app.sqlite"), [4]).close()
 
         made = db_snapshot.create(self.roots)
-        self.assertEqual(sorted(made), sorted(
-            p + db_snapshot.SUFFIX for p in (
-                os.path.join(self.data, "app.db"),
-                os.path.join(self.data, "cwa.db"),
-                os.path.join(self.library, "metadata.db"),
-            )
-        ))
+        self.assertEqual(
+            sorted(made),
+            sorted(
+                p + db_snapshot.SUFFIX
+                for p in (
+                    os.path.join(self.data, "app.db"),
+                    os.path.join(self.data, "cwa.db"),
+                    os.path.join(self.library, "metadata.db"),
+                )
+            ),
+        )
 
     def test_restore_replaces_torn_database_and_drops_stale_side_files(self):
         app_db = os.path.join(self.data, "app.db")

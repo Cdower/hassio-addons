@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Offline tests for the arXiv metadata provider
@@ -24,8 +23,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ADDON_ROOT = os.path.dirname(HERE)
 ARXIV_PATH = os.path.join(
     ADDON_ROOT,
-    "rootfs", "app", "calibre-web-automated",
-    "cps", "metadata_provider", "arxiv.py",
+    "rootfs",
+    "app",
+    "calibre-web-automated",
+    "cps",
+    "metadata_provider",
+    "arxiv.py",
 )
 
 # A trimmed but representative arXiv Atom API response. Exercises: new-style
@@ -56,7 +59,6 @@ recurrent or convolutional neural networks.  </summary>
 def _build_module():
     import abc
     import dataclasses
-    from typing import Dict, Generator, List, Optional, Union
 
     cps = types.ModuleType("cps")
     logger_mod = types.ModuleType("cps.logger")
@@ -84,24 +86,24 @@ def _build_module():
 
     @dataclasses.dataclass
     class MetaRecord:
-        id: Union[str, int]
+        id: str | int
         title: str
-        authors: List[str]
+        authors: list[str]
         url: str
         source: MetaSourceInfo
         cover: str = os.path.join(constants.STATIC_DIR, "generic_cover.svg")
-        description: Optional[str] = ""
-        series: Optional[str] = None
-        series_index: Optional[Union[int, float]] = 0
-        identifiers: Dict[str, Union[str, int]] = dataclasses.field(default_factory=dict)
-        publisher: Optional[str] = None
-        publishedDate: Optional[str] = None
-        rating: Optional[int] = 0
-        languages: Optional[List[str]] = dataclasses.field(default_factory=list)
-        tags: Optional[List[str]] = dataclasses.field(default_factory=list)
-        format: Optional[str] = None
-        confidence_score: Optional[float] = None
-        match_reason: Optional[str] = ""
+        description: str | None = ""
+        series: str | None = None
+        series_index: int | float | None = 0
+        identifiers: dict[str, str | int] = dataclasses.field(default_factory=dict)
+        publisher: str | None = None
+        publishedDate: str | None = None
+        rating: int | None = 0
+        languages: list[str] | None = dataclasses.field(default_factory=list)
+        tags: list[str] | None = dataclasses.field(default_factory=list)
+        format: str | None = None
+        confidence_score: float | None = None
+        match_reason: str | None = ""
 
     class Metadata:
         __name__ = "Generic"
@@ -140,9 +142,7 @@ def _build_module():
                 title = pat.sub(repl, title)
             for token in title.split():
                 token = token.strip().strip('"').strip("'")
-                if token and (
-                    not strip_joiners or token.lower() not in ("a", "and", "the", "&")
-                ):
+                if token and (not strip_joiners or token.lower() not in ("a", "and", "the", "&")):
                     yield token
 
     metadata.MetaSourceInfo = MetaSourceInfo
@@ -165,18 +165,18 @@ def _build_module():
     cps.logger = logger_mod
     cps.constants = constants
     cps.services = services
-    sys.modules.update({
-        "cps": cps,
-        "cps.logger": logger_mod,
-        "cps.constants": constants,
-        "cps.services": services,
-        "cps.services.Metadata": metadata,
-        "requests": requests_stub,
-    })
-
-    spec = importlib.util.spec_from_file_location(
-        "cps.metadata_provider.arxiv", ARXIV_PATH
+    sys.modules.update(
+        {
+            "cps": cps,
+            "cps.logger": logger_mod,
+            "cps.constants": constants,
+            "cps.services": services,
+            "cps.services.Metadata": metadata,
+            "requests": requests_stub,
+        }
     )
+
+    spec = importlib.util.spec_from_file_location("cps.metadata_provider.arxiv", ARXIV_PATH)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod, requests_stub
@@ -197,8 +197,13 @@ def test_class_metadata():
 
 def test_id_regex_accepts_new_and_old_style():
     rx = _ARX.Arxiv.ID_RE
-    for good in ("2301.01234", "2301.01234v3", "arXiv:1706.03762",
-                 "hep-th/9901001", "math.GT/0309136v2"):
+    for good in (
+        "2301.01234",
+        "2301.01234v3",
+        "arXiv:1706.03762",
+        "hep-th/9901001",
+        "math.GT/0309136v2",
+    ):
         assert rx.match(good), good
     for bad in ("attention is all you need", "", "12.34", "foo/bar"):
         assert not rx.match(bad), bad
@@ -206,20 +211,20 @@ def test_id_regex_accepts_new_and_old_style():
 
 def test_parse_entry_full_record():
     a = _ARX.Arxiv()
-    results = a.search("1706.03762")          # id-lookup branch
+    results = a.search("1706.03762")  # id-lookup branch
     assert len(results) == 1
     m = results[0]
     assert m.title == "Attention Is All You Need"
     assert m.authors == ["Ashish Vaswani", "Noam Shazeer"]
-    assert m.id == "1706.03762"               # version stripped
+    assert m.id == "1706.03762"  # version stripped
     assert m.identifiers == {
         "arxiv": "1706.03762",
         "doi": "10.48550/arXiv.1706.03762",
     }
     assert m.url == "https://arxiv.org/abs/1706.03762"
     assert m.publisher == "arXiv"
-    assert m.publishedDate == "2017-06-12"    # YYYY-MM-DD
-    assert m.tags == ["cs.CL", "cs.LG"]       # de-duplicated, order preserved
+    assert m.publishedDate == "2017-06-12"  # YYYY-MM-DD
+    assert m.tags == ["cs.CL", "cs.LG"]  # de-duplicated, order preserved
     assert m.source.id == "arxiv"
     assert "dominant sequence transduction" in m.description
     # Summary whitespace must be collapsed.
@@ -257,7 +262,7 @@ def test_entry_without_id_text_is_skipped():
 
 def test_free_text_branch():
     a = _ARX.Arxiv()
-    results = a.search("attention is all you need")   # free-text branch
+    results = a.search("attention is all you need")  # free-text branch
     assert len(results) == 1
     assert results[0].title == "Attention Is All You Need"
 

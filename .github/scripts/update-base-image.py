@@ -13,6 +13,7 @@ REFRESH lists, space-separated and relative to the add-on, the files whose
 NOTES whose upstream files did not change. Each must name the previous tag.
 Used by .github/workflows/base-image.yaml.
 """
+
 import os
 import re
 import sys
@@ -73,9 +74,7 @@ for note in refresh:
 link = f"[{tag}]({upstream}/blob/{tag}/CHANGELOG.md)"
 changelog_entry.add_or_update(
     os.path.join(addon, "CHANGELOG.md"),
-    re.compile(
-        r"^(- Updated the base image from Calibre-Web NextGen \S+ to )\[[^\]]+\]\([^)]+\)"
-    ),
+    re.compile(r"^(- Updated the base image from Calibre-Web NextGen \S+ to )\[[^\]]+\]\([^)]+\)"),
     rf"\g<1>{link}",
     f"- Updated the base image from Calibre-Web NextGen {previous} to {link}.",
 )
