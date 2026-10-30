@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Updated the base image from Calibre-Web NextGen v4.1.57 to [v4.1.58](https://github.com/new-usemame/calibre-web-nextgen/blob/v4.1.58/CHANGELOG.md).
+- Updated the bundled Tailscale client from 1.104.1 to 1.104.2.
 
 ## [4.1.57.0] - 2026-10-28
 
