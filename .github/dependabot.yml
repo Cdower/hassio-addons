@@ -4,10 +4,9 @@
 #
 # - the GitHub Actions the workflows use (commit SHA pins with their version
 #   comments), grouped into one PR a week;
-# - calibre-web-automated's Python dependencies (pyproject.toml + uv.lock,
-#   runtime and the CI-only `test` group alike);
-# - acpro-thermostat's Python dependencies (requirements.txt);
-# - the uv image calibre-web-automated's Dockerfile builds with.
+# - each add-on's Python dependencies (pyproject.toml + uv.lock, runtime and
+#   the CI-only `test` group alike);
+# - the uv image the add-ons' Dockerfiles build with.
 #
 # Not Dependabot's to move: the Calibre-Web NextGen base image (the Base image
 # workflow, which also reports upstream drift the add-on must be checked
@@ -37,7 +36,7 @@ updates:
     cooldown:
       default-days: 7
 
-  - package-ecosystem: pip
+  - package-ecosystem: uv
     directory: /acpro-thermostat
     schedule:
       interval: weekly
@@ -46,6 +45,13 @@ updates:
 
   - package-ecosystem: docker
     directory: /calibre-web-automated
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+
+  - package-ecosystem: docker
+    directory: /acpro-thermostat
     schedule:
       interval: weekly
     cooldown:
