@@ -39,6 +39,7 @@ env:
   ADDON: calibre-web-automated
   BRANCH: deps/base-image
   UPSTREAM: https://github.com/new-usemame/calibre-web-nextgen
+  BOT_EMAIL: "41898282+github-actions[bot]@users.noreply.github.com"
 
 jobs:
   update:
@@ -100,6 +101,16 @@ jobs:
           fi
 
           newest=$(printf '%s\n%s\n' "${current}" "${latest}" | sort --version-sort | tail -1)
+          open_pr=""
+          others=""
+          if git rev-parse --verify --quiet "refs/remotes/origin/${BRANCH}" > /dev/null; then
+            open_pr=$(gh pr list --head "${BRANCH}" --state open --json number --jq '.[0].number')
+            # Authors of the branch's commits other than this workflow's bot.
+            others=$(
+              git log --format=%ae "HEAD..origin/${BRANCH}" \
+                | { grep --invert-match --fixed-strings --line-regexp "${BOT_EMAIL}" || true; }
+            )
+          fi
           update=false
           if [[ "${latest}" == "${current}" ]]; then
             echo "::notice::${image}:${current} is current"
@@ -108,18 +119,15 @@ jobs:
           # Skip only while an open PR already carries this tag. A pushed
           # branch with no PR (Actions may not be allowed to open one) is
           # pushed again, so the job summary link comes back every week.
-          elif git rev-parse --verify --quiet "refs/remotes/origin/${BRANCH}" > /dev/null \
-              && [[ "$(git show "origin/${BRANCH}:${ADDON}/Dockerfile")" == *"ARG BUILD_FROM=\"${image}:${latest}\""* ]] \
-              && [[ -n "$(gh pr list --head "${BRANCH}" --state open --json number --jq '.[0].number')" ]]; then
+          elif [[ -n "${open_pr}" \
+              && "$(git show "origin/${BRANCH}:${ADDON}/Dockerfile")" == *"ARG BUILD_FROM=\"${image}:${latest}\""* ]]; then
             echo "::notice::An open PR from ${BRANCH} already moves to ${latest}"
           # A review (the update-base-image skill) commits on top of the
-          # workflow's single commit. Force-pushing a newer tag would discard
-          # that work, so leave the open PR alone until it is merged or closed.
-          elif git rev-parse --verify --quiet "refs/remotes/origin/${BRANCH}" > /dev/null \
-              && [[ "$(git rev-list --count "HEAD..origin/${BRANCH}")" -gt 1 ]] \
-              && [[ -n "$(gh pr list --head "${BRANCH}" --state open --json number --jq '.[0].number')" ]]; then
-            echo "::warning::The open PR from ${BRANCH} has commits beyond the automated bump;" \
-                 "not replacing it with ${latest}. Merge or close it first."
+          # workflow's own. Force-pushing a newer tag would discard that work,
+          # so leave the open PR alone until it is merged or closed.
+          elif [[ -n "${open_pr}" && -n "${others}" ]]; then
+            echo "::warning::The open PR from ${BRANCH} has commits by others than this" \
+                 "workflow; not replacing it with ${latest}. Merge or close it first."
           else
             # The tag lands before its image is built and pushed. Until both
             # architectures are there, a bump would only fail CI; the next
@@ -177,7 +185,7 @@ jobs:
         if: ${{ steps.check.outputs.update == 'true' }}
         env:
           TAG: ${{ steps.check.outputs.latest }}
-          REFRESH_REFS: ${{ steps.drift.outputs.drift == 'false' }}
+          REFRESH: ${{ steps.drift.outputs.refresh }}
         run: |
           set -euo pipefail
           python3 -I .github/scripts/update-base-image.py
@@ -199,21 +207,18 @@ jobs:
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.email "${BOT_EMAIL}"
+          title="${ADDON}: bump Calibre-Web NextGen base image to ${VERSION}"
           git switch --force-create "${BRANCH}"
-          git commit --quiet --all \
-            --message "${ADDON}: bump Calibre-Web NextGen base image to ${VERSION}"
+          git commit --quiet --all --message "${title}"
           # The branch belongs to this workflow and is rebuilt from the default
           # branch each time, so an older, unmerged update is replaced.
           git push --quiet --force origin "${BRANCH}"
 
-          ci_dispatched=false
           if [[ "${HAVE_PAT}" != "true" ]]; then
             gh workflow run ci.yaml --ref "${BRANCH}"
-            ci_dispatched=true
           fi
 
-          title="${ADDON}: bump Calibre-Web NextGen base image to ${VERSION}"
           if [[ "${DRIFT}" == "true" ]]; then
             title+=" (needs review)"
           fi
@@ -238,7 +243,7 @@ jobs:
                  "with \`${base_version}\` (the add-on restarts its 4th segment" \
                  "on an upstream bump), merge that PR, then run **Release**." \
                  "See RELEASING.md."
-            if [[ "${ci_dispatched}" == "true" ]]; then
+            if [[ "${HAVE_PAT}" != "true" ]]; then
               echo
               echo "CI was started by hand on this branch, because the push came" \
                    "from \`GITHUB_TOKEN\` and so triggered nothing. It reports" \

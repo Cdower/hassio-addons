@@ -16,7 +16,9 @@ these bumps as PRs from `deps/base-image`. It does step 2's pins (not
 PR body lists which upstream files from steps 3 and 4 changed between the two tags
 (`.github/scripts/base-image-drift.py`). When reviewing such a PR, work on that
 branch and verify the listed files; the rest are unchanged upstream. Keep the
-script's `WATCHED` list in step with steps 3 and 4.
+script's `WATCHED` list in step with steps 3 and 4, and its `NOTES` with the
+"verified against vX" comments step 5 bumps (the workflow moves a note itself
+when the upstream files it covers are unchanged).
 
 ## 1. Get the upstream source at the new tag
 
