@@ -1,0 +1,294 @@
+---
+name: Base image
+
+# Keeps calibre-web-automated on the newest Calibre-Web NextGen release.
+# Dependabot and Renovate could move the tag, but not tell whether the bump is
+# safe: the add-on overrides files inside the image and relies on upstream
+# contracts (see .claude/skills/update-base-image/SKILL.md). Once a week this
+# looks for a newer vX.Y.Z tag of new-usemame/calibre-web-nextgen whose image
+# is published for both architectures, compares the two tags across every
+# upstream file the add-on overrides or depends on, and opens (or refreshes) a
+# PR from the deps/base-image branch that moves the build.yaml and Dockerfile
+# pins and logs the update under Unreleased. The PR says whether those files
+# changed; when they did, it needs the skill's review before merging. The
+# add-on's version is left to the Bump workflow, as for any other change.
+
+# yamllint disable-line rule:truthy
+on:
+  schedule:
+    - cron: "41 7 * * 3"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Upstream tag to move to, e.g. v4.1.57 (defaults to the newest)
+        required: false
+        type: string
+      dry_run:
+        description: Show the diff without pushing a branch or opening a PR
+        required: false
+        default: false
+        type: boolean
+
+permissions: {}
+
+concurrency:
+  group: base-image
+  cancel-in-progress: false
+
+env:
+  ADDON: calibre-web-automated
+  BRANCH: deps/base-image
+  UPSTREAM: https://github.com/new-usemame/calibre-web-nextgen
+  BOT_EMAIL: "41898282+github-actions[bot]@users.noreply.github.com"
+
+jobs:
+  update:
+    name: Update base image
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+          # Credentials are kept because this job pushes the update branch.
+          # A push made with GITHUB_TOKEN triggers no workflows, so prefer a
+          # BUMP_TOKEN PAT when one is configured. Without it the PR step
+          # dispatches CI by hand, as the Bump workflow does.
+          # zizmor: ignore[artipacked] - the pushed branch is the deliverable
+          token: ${{ secrets.BUMP_TOKEN || secrets.GITHUB_TOKEN }}
+      - name: Compare with the latest upstream release
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REQUESTED: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          from=$(sed -n 's/^ARG BUILD_FROM="\([^"]*\)"$/\1/p' "${ADDON}/Dockerfile")
+          image="${from%:*}"
+          current="${from##*:}"
+          if [[ -z "${from}" || "${image}" == "${from}" ]]; then
+            echo "::error file=${ADDON}/Dockerfile::No tagged BUILD_FROM ARG found"
+            exit 1
+          fi
+
+          release='^v[0-9]+\.[0-9]+\.[0-9]+$'
+          if [[ -n "${REQUESTED}" ]]; then
+            latest="${REQUESTED}"
+            if [[ ! "${latest}" =~ ${release} ]]; then
+              echo "::error::'${latest}' is not a vX.Y.Z release tag"
+              exit 1
+            fi
+            if [[ -z "$(git ls-remote --tags --refs "${UPSTREAM}" "refs/tags/${latest}")" ]]; then
+              echo "::error::${UPSTREAM} has no tag ${latest}"
+              exit 1
+            fi
+          else
+            # Release tags only: anything with a suffix (-rc1, -beta) is skipped.
+            latest=$(
+              git ls-remote --tags --refs "${UPSTREAM}" 'v*' \
+                | sed -n 's|^.*\trefs/tags/||p' \
+                | { grep -E "${release}" || true; } \
+                | sort --version-sort | tail -1
+            )
+            if [[ -z "${latest}" ]]; then
+              echo "::error::No vX.Y.Z tags found on ${UPSTREAM}"
+              exit 1
+            fi
+          fi
+
+          newest=$(printf '%s\n%s\n' "${current}" "${latest}" | sort --version-sort | tail -1)
+          open_pr=""
+          others=""
+          if git rev-parse --verify --quiet "refs/remotes/origin/${BRANCH}" > /dev/null; then
+            open_pr=$(gh pr list --head "${BRANCH}" --state open --json number --jq '.[0].number')
+            # Authors of the branch's commits other than this workflow's bot.
+            others=$(
+              git log --format=%ae "HEAD..origin/${BRANCH}" \
+                | { grep --invert-match --fixed-strings --line-regexp "${BOT_EMAIL}" || true; }
+            )
+          fi
+          update=false
+          if [[ "${latest}" == "${current}" ]]; then
+            echo "::notice::${image}:${current} is current"
+          elif [[ -z "${REQUESTED}" && "${newest}" != "${latest}" ]]; then
+            echo "::notice::${image}:${current} is newer than the latest release ${latest}"
+          # Skip only while an open PR already carries this tag. A pushed
+          # branch with no PR (Actions may not be allowed to open one) is
+          # pushed again, so the job summary link comes back every week.
+          elif [[ -n "${open_pr}" \
+              && "$(git show "origin/${BRANCH}:${ADDON}/Dockerfile")" == *"ARG BUILD_FROM=\"${image}:${latest}\""* ]]; then
+            echo "::notice::An open PR from ${BRANCH} already moves to ${latest}"
+          # A review (the update-base-image skill) commits on top of the
+          # workflow's own. Force-pushing a newer tag would discard that work,
+          # so leave the open PR alone until it is merged or closed.
+          elif [[ -n "${open_pr}" && -n "${others}" ]]; then
+            echo "::warning::The open PR from ${BRANCH} has commits by others than this" \
+                 "workflow; not replacing it with ${latest}. Merge or close it first."
+          else
+            # The tag lands before its image is built and pushed. Until both
+            # architectures are there, a bump would only fail CI; the next
+            # run picks it up.
+            platforms=$(
+              docker manifest inspect "${image}:${latest}" \
+                | jq --raw-output '.manifests[]?.platform | "\(.os)/\(.architecture)"' \
+                || true
+            )
+            missing=()
+            for platform in linux/amd64 linux/arm64; do
+              if ! grep --quiet --line-regexp "${platform}" <<< "${platforms}"; then
+                missing+=("${platform}")
+              fi
+            done
+            if [[ ${#missing[@]} -gt 0 ]]; then
+              message="${image}:${latest} is not published for ${missing[*]} yet"
+              if [[ -n "${REQUESTED}" ]]; then
+                echo "::error::${message}"
+                exit 1
+              fi
+              echo "::notice::${message}; trying again next run"
+            else
+              update=true
+            fi
+          fi
+          {
+            echo "image=${image}"
+            echo "current=${current}"
+            echo "latest=${latest}"
+            echo "update=${update}"
+          } >> "$GITHUB_OUTPUT"
+      - name: Compare the upstream files the add-on depends on
+        id: drift
+        if: ${{ steps.check.outputs.update == 'true' }}
+        env:
+          PREVIOUS: ${{ steps.check.outputs.current }}
+          VERSION: ${{ steps.check.outputs.latest }}
+        run: |
+          set -euo pipefail
+          upstream="${RUNNER_TEMP}/upstream"
+          git init --quiet "${upstream}"
+          # Only the two trees are compared, so one commit of each is enough.
+          git -C "${upstream}" fetch --quiet --depth=1 --no-tags "${UPSTREAM}" \
+            "+refs/tags/${PREVIOUS}:refs/tags/${PREVIOUS}" \
+            "+refs/tags/${VERSION}:refs/tags/${VERSION}"
+          python3 -I .github/scripts/base-image-drift.py \
+            "${upstream}" "${PREVIOUS}" "${VERSION}" "${RUNNER_TEMP}/drift.md"
+          {
+            echo '### Upstream drift'
+            echo
+            cat "${RUNNER_TEMP}/drift.md"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Apply the update
+        if: ${{ steps.check.outputs.update == 'true' }}
+        env:
+          TAG: ${{ steps.check.outputs.latest }}
+          REFRESH: ${{ steps.drift.outputs.refresh }}
+        run: |
+          set -euo pipefail
+          python3 -I .github/scripts/update-base-image.py
+          {
+            echo '### Base image update diff'
+            echo '```diff'
+            git --no-pager diff
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Open or refresh the PR
+        if: ${{ steps.check.outputs.update == 'true' && !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ secrets.BUMP_TOKEN || secrets.GITHUB_TOKEN }}
+          PREVIOUS: ${{ steps.check.outputs.current }}
+          VERSION: ${{ steps.check.outputs.latest }}
+          IMAGE: ${{ steps.check.outputs.image }}
+          DRIFT: ${{ steps.drift.outputs.drift }}
+          HAVE_PAT: ${{ secrets.BUMP_TOKEN != '' }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "${BOT_EMAIL}"
+          title="${ADDON}: bump Calibre-Web NextGen base image to ${VERSION}"
+          git switch --force-create "${BRANCH}"
+          git commit --quiet --all --message "${title}"
+          # The branch belongs to this workflow and is rebuilt from the default
+          # branch each time, so an older, unmerged update is replaced.
+          git push --quiet --force origin "${BRANCH}"
+
+          if [[ "${HAVE_PAT}" != "true" ]]; then
+            gh workflow run ci.yaml --ref "${BRANCH}"
+          fi
+
+          if [[ "${DRIFT}" == "true" ]]; then
+            title+=" (needs review)"
+          fi
+          base_version="${VERSION#v}.0"
+          body="${RUNNER_TEMP}/pr-body.md"
+          {
+            echo "Moves \`${ADDON}\` from \`${IMAGE}:${PREVIOUS}\` to" \
+                 "\`${IMAGE}:${VERSION}\`."
+            echo
+            echo "- \`${ADDON}/build.yaml\`, \`${ADDON}/Dockerfile\`: image pins."
+            echo "- \`${ADDON}/CHANGELOG.md\`: entry under Unreleased."
+            echo
+            echo "Release notes: ${UPSTREAM}/blob/${VERSION}/CHANGELOG.md"
+            echo
+            echo "## Upstream drift"
+            echo
+            cat "${RUNNER_TEMP}/drift.md"
+            echo
+            echo "## Releasing"
+            echo
+            echo "The add-on's version is unchanged. After merging, run **Bump**" \
+                 "with \`${base_version}\` (the add-on restarts its 4th segment" \
+                 "on an upstream bump), merge that PR, then run **Release**." \
+                 "See RELEASING.md."
+            if [[ "${HAVE_PAT}" != "true" ]]; then
+              echo
+              echo "CI was started by hand on this branch, because the push came" \
+                   "from \`GITHUB_TOKEN\` and so triggered nothing. It reports" \
+                   "against this same commit, so the required check still applies."
+            fi
+          } > "${body}"
+
+          existing=$(gh pr list --head "${BRANCH}" --state open --json number --jq '.[0].number')
+          if [[ -n "${existing}" ]]; then
+            gh pr edit "${existing}" --title "${title}" --body-file "${body}"
+            exit 0
+          fi
+          error="${RUNNER_TEMP}/pr-create.err"
+          if gh pr create \
+               --base "${GITHUB_REF_NAME}" \
+               --head "${BRANCH}" \
+               --title "${title}" \
+               --body-file "${body}" 2> "${error}"; then
+            exit 0
+          fi
+          cat "${error}" >&2
+
+          # Unless the repository allows it, GITHUB_TOKEN may push but not open
+          # PRs. As in the Bump workflow, hand over a prefilled link instead of
+          # failing; the next scheduled run pushes and links again until a PR
+          # is open.
+          if ! grep --quiet 'not permitted to create or approve pull requests' "${error}"; then
+            exit 1
+          fi
+          url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/compare/${GITHUB_REF_NAME}...${BRANCH}?quick_pull=1"
+          url+="&title=$(jq --raw-input --raw-output '@uri' <<< "${title}")"
+          url+="&body=$(jq --raw-input --raw-output --slurp '@uri' < "${body}")"
+          echo "::warning::GitHub Actions may not open PRs in this repository." \
+               "${BRANCH} is pushed; open its PR from the link in the job summary." \
+               "See RELEASING.md to let the workflow open it next time."
+          {
+            echo '### Open the base image update PR'
+            echo
+            echo "GitHub Actions is not permitted to create pull requests here," \
+                 "so \`${BRANCH}\` was pushed but no PR was opened."
+            echo
+            echo "**[Open the PR for \`${BRANCH}\`](${url})** — title and body are prefilled."
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Report a dry run
+        if: ${{ steps.check.outputs.update == 'true' && inputs.dry_run }}
+        run: |
+          echo "::notice::Dry run: would push ${BRANCH} and open a PR." \
+               "The diff and the drift report are in the job summary."
