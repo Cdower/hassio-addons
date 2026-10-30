@@ -19,7 +19,6 @@ permissions:
   contents: read
   packages: read
   pull-requests: read
-  security-events: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -148,6 +147,27 @@ jobs:
           persist-credentials: false
       - name: Run prek hooks
         uses: j178/prek-action@6ad80277337ad479fe43bd70701c3f7f8aa74db3  # v2.0.3
+        env:
+          # Lets zizmor run its online audits (known-vulnerable and stale
+          # action pins); without a token it falls back to offline mode.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # The pre-commit gitleaks hook only sees the staged diff, so a secret that
+  # was committed with the hooks bypassed would slip past lint-prek. This job
+  # scans every commit in the repository instead.
+  scan-secrets:
+    name: Secret scan (git history)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Run gitleaks over the full history
+        uses: j178/prek-action@6ad80277337ad479fe43bd70701c3f7f8aa74db3  # v2.0.3
+        with:
+          extra-args: --hook-stage manual gitleaks-history
 
   lint-yamllint:
     name: YAMLLint
@@ -199,6 +219,7 @@ jobs:
       - lint-json
       - lint-prek
       - lint-yamllint
+      - scan-secrets
       - test-app
     runs-on: ${{ matrix.architecture == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     strategy:
@@ -266,6 +287,7 @@ jobs:
       - lint-json
       - lint-prek
       - lint-yamllint
+      - scan-secrets
       - test-app
       - build
     runs-on: ubuntu-latest

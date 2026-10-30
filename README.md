@@ -19,6 +19,21 @@ https://github.com/Cdower/hassio-addons
 | **AC Pro Thermostat**     | Local control of the AC Pro X/XB-Series smart communicating touchscreen control | [README](acpro-thermostat/README.md) · [DOCS](acpro-thermostat/DOCS.md)           |
 | **Calibre-Web Automated** | Self-hosted ebook library with automatic ingest, conversion, and metadata       | [README](calibre-web-automated/README.md) · [DOCS](calibre-web-automated/DOCS.md) |
 
+## Contributing
+
+Install the git hooks once per clone so secrets and lint problems are caught
+before they are committed or pushed:
+
+```bash
+prek install
+```
+
+[prek](https://prek.j178.dev) runs the hooks listed in `prek.toml`: gitleaks
+and detect-secrets scan every commit for credentials (and the whole history on
+push), while ruff, bandit, shellcheck, hadolint, actionlint, zizmor and
+yamllint lint the code. CI runs the same hooks on every pull request, plus a
+full-history secret scan, so nothing depends on the hooks being installed.
+
 ## Releasing
 
 Each add-on is versioned and released on its own, tagged `<slug>-v<version>`.

@@ -1,0 +1,16 @@
+# Ruff configuration (https://docs.astral.sh/ruff/). Run by prek (see prek.toml)
+# as `ruff check`; formatting is not enforced.
+
+# Match the Python shipped by the add-on base images (see the Dockerfiles).
+target-version = "py313"
+line-length = 100
+
+[lint]
+select = [
+  "E4", "E7", "E9", "F", # pyflakes + the pycodestyle errors ruff enables by default
+  "W",                    # pycodestyle warnings
+  "I",                    # isort
+  "UP",                   # pyupgrade
+  "B",                    # flake8-bugbear
+  "SIM",                  # flake8-simplify
+]
