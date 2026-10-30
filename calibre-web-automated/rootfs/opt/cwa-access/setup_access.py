@@ -102,7 +102,7 @@ def create_users(con, emails):
             continue
 
         # Mirror upstream create_authenticated_user() defaults
-        # (cps/usermanagement.py @ calibre-web-nextgen v4.1.57).
+        # (cps/usermanagement.py @ calibre-web-nextgen v4.1.58).
         row = {
             "name": email,
             "email": email,
