@@ -8,10 +8,10 @@ earlier one that has not been released yet), that entry's target tag is moved
 forward instead of adding a second line.
 
 With REFRESH_REFS=true, every other mention of the previous tag in the add-on
-(the "verified against vX" notes in overridden files and tests) is moved to
-TAG as well. The workflow sets it only when none of the upstream files the
-add-on depends on changed, so those notes stay true. Used by
-.github/workflows/base-image.yaml.
+outside Markdown files (the "verified against vX" notes in overridden files
+and tests) is moved to TAG as well. The workflow sets it only when none of the
+upstream files the add-on depends on changed, so those notes stay true. Used
+by .github/workflows/base-image.yaml.
 """
 import os
 import re
@@ -66,9 +66,12 @@ if refresh_refs:
     for root, dirs, files in os.walk(addon):
         dirs[:] = [d for d in dirs if d not in ("__pycache__", ".pytest_cache")]
         for name in files:
-            path = os.path.join(root, name)
-            if path == changelog:
+            # The "verified against" notes live in code and tests. Markdown
+            # (CHANGELOG, DOCS, README) mentions old tags as history, which
+            # must not be rewritten.
+            if name.endswith(".md"):
                 continue
+            path = os.path.join(root, name)
             try:
                 text = read(path)
             except UnicodeDecodeError:

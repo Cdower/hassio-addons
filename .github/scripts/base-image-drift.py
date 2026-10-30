@@ -38,6 +38,9 @@ WATCHED = {
                               " `install_providers.py` relies on",
     "cps/services/Metadata.py": "the contract the add-on's arXiv provider"
                                 " implements",
+    "cps/metadata_provider/arxiv.py": "fully replaced by the add-on's own"
+                                      " arXiv provider, which would drop"
+                                      " upstream's changes",
     "cps/content_server.py": "split library mode support",
     "scripts/ingest_processor.py": "split library mode in ingest",
     "scripts/auto_library.py": "must only look for metadata.db under"
@@ -48,10 +51,12 @@ DATABASE = r"/config/[A-Za-z0-9_./-]*\.(db|sqlite[0-9]?)"
 
 
 def git(*args):
-    return subprocess.run(
-        ["git", "-C", upstream, *args],
-        check=True, capture_output=True, text=True,
-    ).stdout
+    result = subprocess.run(
+        ["git", "-C", upstream, *args], capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        sys.exit(f"::error::git {' '.join(args)} failed: {result.stderr.strip()}")
+    return result.stdout
 
 
 def databases(tag):

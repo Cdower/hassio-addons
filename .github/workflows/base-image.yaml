@@ -112,6 +112,14 @@ jobs:
               && [[ "$(git show "origin/${BRANCH}:${ADDON}/Dockerfile")" == *"ARG BUILD_FROM=\"${image}:${latest}\""* ]] \
               && [[ -n "$(gh pr list --head "${BRANCH}" --state open --json number --jq '.[0].number')" ]]; then
             echo "::notice::An open PR from ${BRANCH} already moves to ${latest}"
+          # A review (the update-base-image skill) commits on top of the
+          # workflow's single commit. Force-pushing a newer tag would discard
+          # that work, so leave the open PR alone until it is merged or closed.
+          elif git rev-parse --verify --quiet "refs/remotes/origin/${BRANCH}" > /dev/null \
+              && [[ "$(git rev-list --count "HEAD..origin/${BRANCH}")" -gt 1 ]] \
+              && [[ -n "$(gh pr list --head "${BRANCH}" --state open --json number --jq '.[0].number')" ]]; then
+            echo "::warning::The open PR from ${BRANCH} has commits beyond the automated bump;" \
+                 "not replacing it with ${latest}. Merge or close it first."
           else
             # The tag lands before its image is built and pushed. Until both
             # architectures are there, a bump would only fail CI; the next
