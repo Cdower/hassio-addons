@@ -8,7 +8,7 @@
 # stubbed, and the arXiv Atom API response is served from an in-file
 # fixture. They validate that the provider stays compatible with the
 # `cps.services.Metadata` contract shipped by the
-# calibre-web-nextgen v4.1.57 base image (Python 3.13).
+# calibre-web-nextgen v4.1.58 base image (Python 3.13).
 #
 # Run directly:   python3 calibre-web-automated/tests/test_arxiv.py
 # Or via pytest:  pytest calibre-web-automated/tests/test_arxiv.py
@@ -54,7 +54,7 @@ recurrent or convolutional neural networks.  </summary>
 
 # --------------------------------------------------------------------------
 # Test scaffolding: stub the parts of `cps` the provider imports, mirroring
-# the real v4.1.57 interface, then load arxiv.py in isolation.
+# the real v4.1.58 interface, then load arxiv.py in isolation.
 # --------------------------------------------------------------------------
 def _build_module():
     import abc
@@ -121,7 +121,7 @@ def _build_module():
 
         @staticmethod
         def get_title_tokens(title, strip_joiners=True):
-            # Patterns verbatim from cps/services/Metadata.py @ v4.1.57.
+            # Patterns verbatim from cps/services/Metadata.py @ v4.1.58.
             title_patterns = [
                 (re.compile(pat, re.IGNORECASE), repl)
                 for pat, repl in [
