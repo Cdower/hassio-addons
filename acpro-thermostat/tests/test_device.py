@@ -6,6 +6,7 @@ import json
 from typing import Any
 
 import pytest
+
 from acpro_thermostat import device as device_module
 from acpro_thermostat import protocol
 from acpro_thermostat.device import AcProDevice, DeviceError, DeviceInfo

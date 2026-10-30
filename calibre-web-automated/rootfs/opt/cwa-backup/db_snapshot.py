@@ -135,8 +135,7 @@ def write_list(roots, snapshots):
     path = list_path(roots)
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as fh:
-        for snap in snapshots:
-            fh.write(f"{snap}\n")
+        fh.writelines(f"{snap}\n" for snap in snapshots)
     os.replace(tmp, path)
 
 

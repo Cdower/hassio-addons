@@ -28,11 +28,9 @@ before they are committed or pushed:
 prek install
 ```
 
-[prek](https://prek.j178.dev) runs the hooks listed in `prek.toml`: gitleaks
-and detect-secrets scan every commit for credentials (and the whole history on
-push), while ruff (lint and format), bandit, shellcheck, hadolint, actionlint,
-zizmor and yamllint check the code. CI runs the same hooks on every pull request, plus a
-full-history secret scan, so nothing depends on the hooks being installed.
+[prek](https://prek.j178.dev) runs the hooks in `prek.toml` (secret scanning,
+linters, formatters); CI runs them too, so nothing depends on the hooks being
+installed.
 
 ## Releasing
 

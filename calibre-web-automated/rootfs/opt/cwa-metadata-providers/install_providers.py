@@ -59,8 +59,7 @@ def read_manifest(path):
 def write_manifest(path, names):
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     with open(path, "w", encoding="utf-8") as fh:
-        for name in sorted(names):
-            fh.write(f"{name}\n")
+        fh.writelines(f"{name}\n" for name in sorted(names))
 
 
 def remove_previous(dest, manifest_names):

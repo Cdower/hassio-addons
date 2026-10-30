@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
+
 from acpro_thermostat import config
 from acpro_thermostat.config import ConfigError, Options
 

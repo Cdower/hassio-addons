@@ -37,7 +37,7 @@ def block(name):
     """
     with open(CONFIG, encoding="utf-8") as fh:
         text = fh.read()
-    body = re.search(rf"^{name}:\n((?:[ \t].*\n|\n)*)", text, re.M)
+    body = re.search(rf"^{name}:\n((?:[ \t].*\n|\n)*)", text, re.MULTILINE)
     assert body, f"no {name}: block in {CONFIG}"
     entries = {}
     key = None

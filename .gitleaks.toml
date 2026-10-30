@@ -1,24 +1,20 @@
 # Gitleaks configuration (https://github.com/gitleaks/gitleaks#configuration).
-# prek runs gitleaks on staged changes before every commit and on the full
-# history before every push; CI scans the full history again (see
-# .github/workflows/ci.yaml). This file only adds an allowlist on top of the
-# default rules, so new rule releases are picked up automatically.
-
-title = "hassio-addons"
+# An allowlist on top of the default rules, so new rule releases are picked up
+# automatically. See the gitleaks hooks in prek.toml for when scans run.
 
 [extend]
 useDefault = true
 
 [allowlist]
-description = "Values that look like credentials but are not"
 paths = [
   # detect-secrets' baseline stores SHA-1 hashes of the strings it has already
   # classified, which gitleaks' generic rule mistakes for API keys.
   '''^\.secrets\.baseline$''',
 ]
 regexes = [
-  # The AC Pro device key used by acpro-thermostat's unit tests. It is a made-up
-  # 16-byte AES-128 key for a fake control; the real key is per device and is
-  # never stored in this repository.
+  # The AC Pro device key used by acpro-thermostat's unit tests (DEVICE_KEY in
+  # tests/test_device.py): a made-up 16-byte AES-128 key for a fake control.
+  # The real key is per device and is never stored in this repository. Matched
+  # by value because the history scan sees every commit that ever held it.
   '''St8Vw1Yz4Bc7Ted6''',
 ]

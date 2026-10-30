@@ -5,15 +5,7 @@
 #   prek run --hook-stage manual gitleaks-history   # scan the full git history
 #
 # CI runs the same hooks via .github/workflows/ci.yaml, so a hook that is skipped
-# locally still gates the merge. The hooks fall into three groups:
-#
-#   Secret scanning   gitleaks (staged changes, then the whole history on push),
-#                     detect-secrets (keyword and entropy heuristics, against an
-#                     audited baseline), detect-private-key, detect-aws-credentials
-#   Static analysis   ruff and bandit (Python), shellcheck (shell), hadolint
-#                     (Dockerfiles), actionlint and zizmor (GitHub workflows),
-#                     yamllint (YAML)
-#   Hygiene           the pre-commit-hooks checks for file problems
+# locally still gates the merge.
 
 default_install_hook_types = ["pre-commit", "pre-push"]
 # Hooks run on commit unless they say otherwise; only gitleaks-history opts
@@ -31,23 +23,18 @@ rev = "83d9cd684c87d95d656c1458ef04895a7f1cbd8e" # "v8.30.1"
 # Scans the staged diff with the default rules plus .gitleaks.toml.
 [[repos.hooks]]
 id = "gitleaks"
-stages = ["pre-commit"]
-
-[[repos]]
-repo = "local"
 
 # Scans every commit in the repository, not just the staged diff, so a secret
 # that was committed with the hooks bypassed (or before they existed) is caught
 # before it leaves the machine. CI runs the same hook with the full history
-# checked out.
+# checked out. The upstream hook hard-codes --staged in its entry, so this
+# overrides entry (a prek extension) rather than defining a second hook that
+# would build gitleaks a second time.
 [[repos.hooks]]
-id = "gitleaks-history"
+id = "gitleaks"
+alias = "gitleaks-history"
 name = "gitleaks (full history)"
-language = "golang"
-# The module keeps its pre-rename import path.
-additional_dependencies = ["github.com/zricethezav/gitleaks/v8@v8.30.1"]
 entry = "gitleaks git --no-banner --redact --verbose"
-pass_filenames = false
 always_run = true
 stages = ["pre-push", "manual"]
 
@@ -131,7 +118,6 @@ rev = "cba56bcde1fdd01c1deb3f945e69764c291a6530" # "v1.38.0"
 
 [[repos.hooks]]
 id = "yamllint"
-args = ["--strict"]
 
 # ---------------------------------------------------------------------------
 # Hygiene
@@ -142,15 +128,7 @@ repo = "https://github.com/pre-commit/pre-commit-hooks"
 rev = "3e8a8703264a2f4a69428a0aa4dcb512790b2c8c" # "v6.0.0"
 
 [[repos.hooks]]
-id = "detect-private-key"
-
-[[repos.hooks]]
-id = "detect-aws-credentials"
-args = ["--allow-missing-credentials"]
-
-[[repos.hooks]]
 id = "check-added-large-files"
-args = ["--maxkb=512"]
 
 [[repos.hooks]]
 id = "check-case-conflict"

@@ -7,6 +7,7 @@ import threading
 from collections.abc import Iterator
 
 import pytest
+
 from acpro_thermostat import device as device_module
 from acpro_thermostat.device import Transport
 from acpro_thermostat.entities import EntityMap
