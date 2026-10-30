@@ -38,7 +38,7 @@ concurrency:
 jobs:
   release:
     name: Tag & release ${{ inputs.addon }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04-arm
     permissions:
       contents: write
     outputs:

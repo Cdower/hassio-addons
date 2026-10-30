@@ -27,7 +27,7 @@ concurrency:
 jobs:
   discover:
     name: Discover add-ons
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04-arm
     outputs:
       addons: ${{ steps.discover.outputs.addons }}
       builds: ${{ steps.discover.outputs.builds }}
@@ -84,7 +84,7 @@ jobs:
   lint-app:
     name: Lint App (${{ matrix.addon }})
     needs: discover
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04-arm
     strategy:
       fail-fast: false
       matrix:
@@ -103,7 +103,10 @@ jobs:
   lint-hadolint:
     name: Hadolint (${{ matrix.addon }})
     needs: discover
-    runs-on: ubuntu-latest
+    # hadolint-action builds from hadolint/hadolint:v2.4.0-debian, which only
+    # ships an amd64 image, so this is the one lint job that cannot use the
+    # arm runner.
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
@@ -120,7 +123,7 @@ jobs:
 
   lint-json:
     name: JSON Lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04-arm
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -139,7 +142,7 @@ jobs:
 
   lint-prek:
     name: Prek
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04-arm
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -157,7 +160,7 @@ jobs:
   # scans every commit in the repository instead.
   scan-secrets:
     name: Secret scan (git history)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04-arm
     steps:
       - name: Checkout (full history)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -171,7 +174,7 @@ jobs:
 
   lint-yamllint:
     name: YAMLLint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04-arm
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -182,7 +185,7 @@ jobs:
 
   test-app:
     name: Test App
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04-arm
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -221,7 +224,7 @@ jobs:
       - lint-yamllint
       - scan-secrets
       - test-app
-    runs-on: ${{ matrix.architecture == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.architecture == 'aarch64' && 'ubuntu-26.04-arm' || 'ubuntu-26.04' }}
     strategy:
       fail-fast: false
       matrix:
@@ -290,7 +293,7 @@ jobs:
       - scan-secrets
       - test-app
       - build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04-arm
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1

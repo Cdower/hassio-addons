@@ -37,7 +37,7 @@ env:
 jobs:
   update:
     name: Update Tailscale
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04-arm
     permissions:
       actions: write
       contents: write
