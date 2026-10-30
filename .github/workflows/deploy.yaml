@@ -209,8 +209,11 @@ jobs:
         env:
           ARCHITECTURE: ${{ matrix.architecture }}
           BUILD_FILE: ${{ steps.info.outputs.build }}
+          OWNER: ${{ needs.discover.outputs.owner }}
+          SLUG: ${{ steps.info.outputs.slug }}
         run: |
           echo "date=$(date +"%Y-%m-%dT%H:%M:%SZ")" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${OWNER}/${ARCHITECTURE}-hassio-addon-${SLUG}" >> "$GITHUB_OUTPUT"
           from=$(yq --no-colors eval ".build_from.${ARCHITECTURE}" "${BUILD_FILE}")
           echo "from=${from}" >> "$GITHUB_OUTPUT"
           case "${ARCHITECTURE}" in
@@ -230,8 +233,8 @@ jobs:
         with:
           push: true
           tags: |
-            ghcr.io/${{ needs.discover.outputs.owner }}/${{ matrix.architecture }}-hassio-addon-${{ steps.info.outputs.slug }}:${{ needs.discover.outputs.version }}
-            ghcr.io/${{ needs.discover.outputs.owner }}/${{ matrix.architecture }}-hassio-addon-${{ steps.info.outputs.slug }}:latest
+            ${{ steps.flags.outputs.image }}:${{ needs.discover.outputs.version }}
+            ${{ steps.flags.outputs.image }}:latest
           # zizmor: ignore[template-injection] - path input to action, not shell-executed
           context: ${{ steps.info.outputs.target }}
           file: ${{ steps.info.outputs.target }}/Dockerfile
@@ -247,15 +250,24 @@ jobs:
             BUILD_REF=${{ steps.commit.outputs.sha }}
             BUILD_REPOSITORY=${{ github.repository }}
             BUILD_VERSION=${{ needs.discover.outputs.version }}
+      # The provenance names the commit from the run's OIDC token, which is
+      # github.sha. With a `ref` input that is not what was built, so an
+      # attestation would vouch for the wrong source; leave the image unsigned.
       - name: Attest build provenance
+        if: steps.commit.outputs.sha == github.sha
         # With no predicate given, this attests SLSA build provenance.
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           # No tag: the digest identifies the image, so both `:<version>` and
           # `:latest` are covered by the one attestation.
-          subject-name: ghcr.io/${{ needs.discover.outputs.owner }}/${{ matrix.architecture }}-hassio-addon-${{ steps.info.outputs.slug }}
+          subject-name: ${{ steps.flags.outputs.image }}
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
-          # Storage records are only available to organization-owned
-          # repositories; this one is user-owned, so the API call would fail.
-          create-storage-record: false
+      - name: Report a skipped attestation
+        if: steps.commit.outputs.sha != github.sha
+        env:
+          BUILT: ${{ steps.commit.outputs.sha }}
+        run: |
+          echo "::warning::Built ${BUILT}, not the workflow's commit ${GITHUB_SHA}," \
+               "so no provenance attestation was made. To attest a rebuild, run" \
+               "Deploy from that ref ('Use workflow from') instead of passing 'ref'."
