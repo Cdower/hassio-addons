@@ -80,7 +80,30 @@ with its title and body already filled in.
 The weekly **Tailscale** workflow, which opens PRs that update the Tailscale
 client bundled into calibre-web-automated, uses the same token and the same
 fallback. Until its PR is open, each scheduled run pushes the branch again and
-repeats the link.
+repeats the link. So does the weekly **Base image** workflow below.
+
+## Base image updates
+
+The weekly **Base image** workflow keeps calibre-web-automated on the newest
+Calibre-Web NextGen release. When a newer `vX.Y.Z` tag's image is published
+for both architectures, it opens (or refreshes) a PR from `deps/base-image`
+that moves the `build.yaml` and `Dockerfile` pins and logs the update under
+`## [Unreleased]`. Run it by hand (Actions → Base image → Run workflow) to
+check now, or to move to a specific tag.
+
+The add-on overrides files inside the upstream image and relies on its
+behaviour, so the PR reports which of those upstream files changed between
+the two tags:
+
+- **Nothing changed**: the overrides carry over as they are. Merge once CI is
+  green.
+- **Something changed** (the title says "needs review"): re-diff and
+  re-verify the listed files as `.claude/skills/update-base-image/SKILL.md`
+  describes before merging, for example by asking Claude to run
+  `/update-base-image` on that branch.
+
+The workflow leaves `version:` alone. After merging, release it as usual:
+Bump to `<upstream version>.0` (for example `4.1.58.0`), then Release.
 
 ## CI on bump PRs
 

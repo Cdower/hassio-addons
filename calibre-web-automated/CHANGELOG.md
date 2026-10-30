@@ -7,8 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.1.57.0] - 2026-10-28
+
 ### Changed
 
+- Updated the base image from Calibre-Web NextGen v4.1.48 to [v4.1.57](https://github.com/new-usemame/calibre-web-nextgen/blob/v4.1.57/CHANGELOG.md). Upstream highlights include much faster covers, reader and library pages on very large libraries, more than one user without an email address, a web reader that no longer overwrites the place a Kobo or KOReader shared, automatic metadata fetch filling a missing series from another source, and CWA settings from another version kept instead of dropped on an upgrade or downgrade. Upstream's s6 services, including the overridden `svc-calibre-web-automated/run`, are unchanged, so the `-i $CWA_BIND_ADDRESS` loopback pin for Cloudflare Access mode carries over as is.
 - Updated the bundled Tailscale client from 1.102.3 to 1.104.1.
 
 ## [4.1.48.2] - 2026-10-19
