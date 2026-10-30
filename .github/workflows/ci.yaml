@@ -132,15 +132,15 @@ jobs:
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
         with:
           # Match the Python shipped by the add-on base images (see the
-          # Dockerfiles); keep in step with target-version in ruff.toml.
+          # Dockerfiles); keep in step with target-version in ruff.toml and
+          # the add-ons' .python-version files.
           python-version: "3.13"
-      - name: Install test dependencies
-        run: |
-          shopt -s nullglob
-          pip install pytest
-          for requirements in */requirements.txt; do
-            pip install -r "${requirements}"
-          done
+      - name: Set up uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2  # v10.3.3
+        with:
+          # Keep in step with the uv stage in calibre-web-automated/Dockerfile.
+          version: "0.13.6"
+          enable-cache: true
       - name: Run add-on tests
         run: |
           shopt -s nullglob
@@ -149,7 +149,23 @@ jobs:
             echo "::error::No add-on test suites found"
             exit 1
           fi
-          pytest "${suites[@]}" -v
+          for suite in "${suites[@]}"; do
+            addon="${suite%/tests}"
+            echo "::group::${addon}"
+            if [[ -f "${addon}/pyproject.toml" ]]; then
+              # uv-managed add-on: uv.lock's runtime dependencies plus its
+              # `test` group (pytest and what the base image ships), in the
+              # add-on's own virtual environment.
+              uv run --project "${addon}" --frozen --group test \
+                pytest "${suite}" -v
+            else
+              # pip-managed add-on: the requirements.txt its Dockerfile
+              # installs, plus pytest.
+              pip install pytest -r "${addon}/requirements.txt"
+              pytest "${suite}" -v
+            fi
+            echo "::endgroup::"
+          done
 
   build:
     name: Build ${{ matrix.addon }} (${{ matrix.architecture }})

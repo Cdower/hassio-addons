@@ -105,21 +105,24 @@ corresponding add-on code/tests must be updated:
   warns).
 - `/lsiopy` venv still exists and ships `cryptography` + `werkzeug`
   (`grep -n lsiopy Dockerfile`, `grep -in "cryptography\|werkzeug" pyproject.toml`
-  in the upstream clone) — the Dockerfile pip-installs PyJWT into it and
+  in the upstream clone) — the Dockerfile installs the add-on's own
+  `pyproject.toml` / `uv.lock` dependencies (PyJWT) into it with uv, and
   `setup_access.py`/`verifier.py` run on it.
 
 ## 5. Update docs and changelog
 
 - `CHANGELOG.md`: new `## [X.Y.Z]` section (Keep a Changelog).
 - Mentions of the old version in comments (`tests/test_arxiv.py`, the svc run
-  override header) — bump them. Keep `calibre-web-automated/requirements.txt`'s
-  PyJWT pin matching the Dockerfile's `PYJWT_VERSION`.
+  override header) — bump them. If the image's `/lsiopy` moved `cryptography`
+  or `werkzeug` (`/lsiopy/bin/pip list` in the new image), move the `test`
+  group pins in `calibre-web-automated/pyproject.toml` to match and run
+  `uv lock --project calibre-web-automated`.
 
 ## 6. Gate
 
 ```bash
 prek run --all-files
-pytest calibre-web-automated/tests/ -v
+uv run --project calibre-web-automated --frozen --group test pytest calibre-web-automated/tests/ -v
 docker build --build-arg BUILD_ARCH=amd64 calibre-web-automated/
 apparmor_parser -Q -K -S -M /etc/apparmor.d/abi/4.0 calibre-web-automated/apparmor.txt > /dev/null
 ```

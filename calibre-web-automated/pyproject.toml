@@ -1,0 +1,36 @@
+# Python dependencies of the calibre-web-automated add-on, managed with uv
+# (https://docs.astral.sh/uv/). uv.lock pins every package and its hashes;
+# refresh it with `uv lock` after editing this file.
+#
+# `dependencies` is what the Dockerfile installs into the base image's /lsiopy
+# venv, alongside everything Calibre-Web NextGen already ships there. Keep it
+# to what the add-on's own scripts under rootfs/ import and the image lacks.
+#
+# The `test` dependency group is for CI and local test runs only
+# (`uv run --group test pytest tests`); the Dockerfile leaves it out. It mirrors
+# what the scripts see in the image: cryptography and werkzeug are pinned to the
+# versions the base image's /lsiopy ships (check with
+# `/lsiopy/bin/pip list` in the image after a base image bump).
+#
+# This is not a package: `tool.uv.package = false` keeps uv from building or
+# installing the add-on itself. The add-on's version lives in config.yaml.
+[project]
+name = "calibre-web-automated-addon"
+version = "0.0.0"
+description = "Home Assistant add-on for Calibre-Web Automated"
+requires-python = ">=3.13"
+dependencies = [
+  # Cloudflare Access verifier (rootfs/opt/cwa-access/verifier.py) validates
+  # Cf-Access-Jwt-Assertion with it; /lsiopy's cryptography is its RS256 backend.
+  "PyJWT==2.10.1",
+]
+
+[dependency-groups]
+test = [
+  "pytest==9.2.0",
+  "cryptography==43.0.3",
+  "werkzeug==3.1.9",
+]
+
+[tool.uv]
+package = false

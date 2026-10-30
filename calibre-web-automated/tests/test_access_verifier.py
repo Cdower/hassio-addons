@@ -5,10 +5,12 @@
 #
 # No network access: the JWKS client is replaced with a stub returning a
 # locally generated RSA public key, and requests are made over a loopback
-# server on an ephemeral port. Requires PyJWT + cryptography (see ci.yaml).
+# server on an ephemeral port. Requires PyJWT + cryptography (the `test`
+# dependency group in pyproject.toml).
 #
-# Run directly:   python3 calibre-web-automated/tests/test_access_verifier.py
-# Or via pytest:  pytest calibre-web-automated/tests/test_access_verifier.py
+# Run via pytest:
+#   uv run --project calibre-web-automated --group test \
+#     pytest calibre-web-automated/tests/test_access_verifier.py
 
 import datetime
 import http.client

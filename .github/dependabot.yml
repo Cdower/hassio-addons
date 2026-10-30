@@ -1,0 +1,52 @@
+---
+# Dependabot keeps the pins in this repository current and opens a PR for
+# each update (https://docs.github.com/code-security/dependabot):
+#
+# - the GitHub Actions the workflows use (commit SHA pins with their version
+#   comments), grouped into one PR a week;
+# - calibre-web-automated's Python dependencies (pyproject.toml + uv.lock,
+#   runtime and the CI-only `test` group alike);
+# - acpro-thermostat's Python dependencies (requirements.txt);
+# - the uv image calibre-web-automated's Dockerfile builds with.
+#
+# Not Dependabot's to move: the Calibre-Web NextGen base image (the Base image
+# workflow, which also reports upstream drift the add-on must be checked
+# against), the bundled Tailscale client (the Tailscale workflow), the add-on
+# base images pinned through build.yaml / `ARG BUILD_FROM` (Dependabot only
+# reads literal `FROM` lines), and the prek hooks in prek.toml.
+#
+# The cooldown waits a week after a release before proposing it, so a version
+# that is yanked or found compromised within days never reaches a PR.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  - package-ecosystem: uv
+    directory: /calibre-web-automated
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+
+  - package-ecosystem: pip
+    directory: /acpro-thermostat
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+
+  - package-ecosystem: docker
+    directory: /calibre-web-automated
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
