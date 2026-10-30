@@ -1,4 +1,4 @@
-ARG BUILD_FROM="ghcr.io/new-usemame/calibre-web-nextgen:v4.1.40"
+ARG BUILD_FROM="ghcr.io/new-usemame/calibre-web-nextgen:v4.1.58"
 # hadolint ignore=DL3006
 FROM ${BUILD_FROM}
 
@@ -17,6 +17,15 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # (default 911:911) cannot write library_path / ingest_path.
 ENV PUID=1000 \
     PGID=1000
+
+# How long s6 waits at shutdown for the services to stop (default 5000 ms)
+# before signalling whatever is left and, S6_KILL_GRACETIME (3000 ms) later,
+# killing it. CWA stops first and the metadata_db_export exporter last, with a
+# final copy of metadata.db to the NAS that a slow share or a large library
+# can stretch past 5 s. Leaves room under config.yaml's `timeout: 30`, the
+# Supervisor's own limit for the whole stop. Services that stop sooner are
+# not held up by it.
+ENV S6_SERVICES_GRACETIME=25000
 
 # Opt in to user-installed Calibre plugins, which is what makes the add-on's
 # `plugins_path` option actually work.
@@ -71,15 +80,25 @@ RUN \
     && rm -rf /var/lib/apt/lists/* /etc/nginx/sites-enabled/default \
     && /lsiopy/bin/pip install --no-cache-dir "PyJWT==${PYJWT_VERSION}"
 
+# cifs-utils provides mount.cifs for the optional `smb_share` option: the
+# add-on mounts the share itself so it can choose the files' owner (Home
+# Assistant's Network Storage mounts CIFS as root-only-writable). The mount is
+# permitted by the add-on's AppArmor profile (apparmor.txt).
+# hadolint ignore=DL3008
+RUN \
+    apt-get update \
+    && apt-get install -y --no-install-recommends cifs-utils \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install Tailscale. Userspace networking mode (set via the s6 run script)
 # means no /dev/net/tun, NET_ADMIN, or NET_RAW required — tailscaled runs as
 # a userspace SOCKS/HTTP proxy and `tailscale serve` exposes localhost:8083
 # to the tailnet. Tarball is fetched over HTTPS from the official publisher
 # and verified against per-arch sha256 pinned below; bump TAILSCALE_VERSION
 # and both hashes together when upgrading.
-ARG TAILSCALE_VERSION="1.96.4"
-ARG TAILSCALE_SHA256_AMD64="a1cba18826b1f91cb25ef7f5b8259b5258339b42db7867af9269e21829ea78cc"
-ARG TAILSCALE_SHA256_ARM64="a27249bc70d7b37a68f8be7f5c4507ea5f354e592dce43cb5d4f3e742b313c3c"
+ARG TAILSCALE_VERSION="1.104.2"
+ARG TAILSCALE_SHA256_AMD64="512f613ed7d04fc7282f7dc5bd76aa105aae28168fbb9357eb749ebcbc29f0ae"
+ARG TAILSCALE_SHA256_ARM64="5776aaa901b5ef1916e66be5bb54b9f481cd399c9c28db123a8cab620efa237b"
 RUN \
     case "${BUILD_ARCH}" in \
         amd64) TS_ARCH=amd64; TS_SHA256="${TAILSCALE_SHA256_AMD64}" ;; \

@@ -6,6 +6,7 @@ output to GITHUB_OUTPUT describing anything the author needs to fix by hand
 (an empty or missing Unreleased section), or an empty string when the bump
 was clean. Used by .github/workflows/bump.yaml.
 """
+
 import os
 import re
 import sys
@@ -35,32 +36,45 @@ heading = f"## [{version}] - {today}"
 warning = ""
 
 if not os.path.exists(changelog):
-    lines = ["# Changelog", "", "## [Unreleased]", "", heading, "",
-             "- TODO: describe this release before publishing.", ""]
+    lines = [
+        "# Changelog",
+        "",
+        "## [Unreleased]",
+        "",
+        heading,
+        "",
+        "- TODO: describe this release before publishing.",
+        "",
+    ]
     warning = f"{changelog} did not exist; wrote a stub"
 else:
     with open(changelog, encoding="utf-8") as handle:
         lines = handle.read().splitlines()
 
     unreleased = next(
-        (i for i, line in enumerate(lines)
-         if re.match(r"(?i)^##[ \t]+\[?unreleased\]?[ \t]*$", line)),
+        (
+            i
+            for i, line in enumerate(lines)
+            if re.match(r"(?i)^##[ \t]+\[?unreleased\]?[ \t]*$", line)
+        ),
         None,
     )
     if unreleased is not None:
-        body = lines[unreleased + 1:]
-        next_heading = next(
-            (i for i, line in enumerate(body) if line.startswith("## ")), len(body)
-        )
+        body = lines[unreleased + 1 :]
+        next_heading = next((i for i, line in enumerate(body) if line.startswith("## ")), len(body))
         if not any(line.strip() for line in body[:next_heading]):
             warning = f"the Unreleased section in {changelog} is empty"
-        lines[unreleased:unreleased + 1] = ["## [Unreleased]", "", heading]
+        lines[unreleased : unreleased + 1] = ["## [Unreleased]", "", heading]
     else:
-        first = next(
-            (i for i, line in enumerate(lines) if line.startswith("## ")), len(lines)
-        )
-        lines[first:first] = ["## [Unreleased]", "", heading, "",
-                              "- TODO: describe this release before publishing.", ""]
+        first = next((i for i, line in enumerate(lines) if line.startswith("## ")), len(lines))
+        lines[first:first] = [
+            "## [Unreleased]",
+            "",
+            heading,
+            "",
+            "- TODO: describe this release before publishing.",
+            "",
+        ]
         warning = f"{changelog} had no Unreleased section; added a placeholder entry"
 
 with open(changelog, "w", encoding="utf-8") as handle:

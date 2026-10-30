@@ -7,6 +7,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Updated the base image from Calibre-Web NextGen v4.1.57 to [v4.1.58](https://github.com/new-usemame/calibre-web-nextgen/blob/v4.1.58/CHANGELOG.md).
+- Updated the bundled Tailscale client from 1.104.1 to 1.104.2.
+
+## [4.1.57.0] - 2026-10-28
+
+### Changed
+
+- Updated the base image from Calibre-Web NextGen v4.1.48 to [v4.1.57](https://github.com/new-usemame/calibre-web-nextgen/blob/v4.1.57/CHANGELOG.md). Upstream highlights include much faster covers, reader and library pages on very large libraries, more than one user without an email address, a web reader that no longer overwrites the place a Kobo or KOReader shared, automatic metadata fetch filling a missing series from another source, and CWA settings from another version kept instead of dropped on an upgrade or downgrade. Upstream's s6 services, including the overridden `svc-calibre-web-automated/run`, are unchanged, so the `-i $CWA_BIND_ADDRESS` loopback pin for Cloudflare Access mode carries over as is.
+- Updated the bundled Tailscale client from 1.102.3 to 1.104.1.
+
+## [4.1.48.2] - 2026-10-19
+
+### Fixed
+
+- Saving the configuration failed with `Missing option 'metadata_db_export' in root` on an install that predates that option. Home Assistant validates the whole saved options set against the add-on's schema but never adds a newly introduced option to an existing install's options, so a required new option makes the configuration page unsaveable until the option is typed in by hand in YAML mode. `metadata_db_export`, `tailscale_serve`, `tailscale_funnel` and `access_users` are optional in the schema now (a list option carries the `?` on its element type, which is what the Supervisor checks a missing list option against), and a test keeps it that way. `tailscale_serve` still defaults to `true` when it is missing from an install's options, as documented, and `tailscale_hostname` and `tailscale_extra_args` no longer read a missing option as the literal string `null` — which named the tailnet node `null` and passed a stray `null` argument to `tailscale up`.
+
+### Added
+
+- `books_path` option: keep the book folders on the NAS while `metadata.db` stays on the add-on's local storage. It uses CWA's own split library mode, which the add-on now configures: `library_path` holds only `metadata.db`, and new books, conversions and edits write their files to `books_path`. SQLite then never runs over the network, so WAL stays on and `metadata.db` is part of the add-on's backups. On the first start with a new `books_path`, the add-on moves an existing `metadata.db` from that folder into `library_path` and renames the one left behind to `metadata.db.pre-split`; it refuses to start if both folders already hold a library with books. Changing only `library_path` later moves `metadata.db` over from the previous one (or, if that folder is gone, restores it from the `metadata_db_export` copy), instead of starting an empty library. Clearing `books_path` turns split library mode off again. The Calibre content server does not support split library mode.
+- `metadata_db_export` option: with `books_path` set, keep a read-only copy of `metadata.db` in `books_path`, so the NAS folder stays a complete Calibre library for NAS backups and Calibre desktop. It is written with SQLite's backup API after changes settle (at least every 10 minutes while the library keeps changing) and once more when the add-on stops, and renamed into place so readers never see a partial file. The add-on now allows 30 seconds to stop (`timeout: 30`, and s6's `S6_SERVICES_GRACETIME` raised to 25 s) so that last copy can finish.
+
+## [4.1.48.1] - 2026-10-19
+
+### Fixed
+
+- `smb_share` could not be mounted: every attempt failed with `Unable to apply new capability set` and the add-on stopped with `Could not mount //server/share`. `mount.cifs` drops its privileges on start and keeps `CAP_DAC_READ_SEARCH` while doing so, and the kernel refuses to hand a process a capability its container never had. The add-on now also requests `DAC_READ_SEARCH`, and its AppArmor profile denies using it, so the only thing that changes is that `mount.cifs` can start. Home Assistant's security rating is unchanged.
+
+## [4.1.48.0] - 2026-10-19
+
+### Changed
+
+- Updated the base image from Calibre-Web NextGen v4.1.40 to [v4.1.48](https://github.com/new-usemame/calibre-web-nextgen/blob/v4.1.48/CHANGELOG.md). Upstream highlights include per-user "My Library" mode, per-device book scope for Kobo and KOReader, hierarchical tag browsing, bulk editing in the table view and a Catalan translation. Upstream now only believes `X-Forwarded-*` headers from loopback, private networks and Tailscale (`TRUSTED_PROXY_NETWORKS`); the add-on's own nginx front, Home Assistant's network and the cloudflared add-on all fall inside that default, so no change is needed.
+- The CWA server override (`svc-calibre-web-automated/run`) was re-applied on top of upstream's new version, which also clears `PYTHONPATH` and user site-packages before starting the app. The `-i $CWA_BIND_ADDRESS` loopback pin for Cloudflare Access mode is unchanged.
+- Accounts created for `access_users` now match upstream's defaults for new users: Kobo sync sends only selected shelves (`kobo_only_shelves_sync = 1`), and the instance's default UI fonts are copied onto the account.
+
+## [4.1.40.2] - 2026-10-19
+
+### Added
+
+- `smb_share` option (with `smb_username`, `smb_password`, `smb_domain`, `smb_version`): the add-on mounts an SMB/CIFS share itself at `/mnt/smb`, with files owned by the user CWA runs as. Home Assistant's Network Storage mounts CIFS shares writable only by root, and has no option to change that. On such a mount CWA could read the library but every write failed, which on a `/share`-hosted `config_path` crash-looped the add-on with `attempt to write a readonly database`. Point `library_path` / `ingest_path` under `/mnt/smb`. With `library_path` on the share, `network_share_mode` is turned on automatically; with only `ingest_path` there, the ingest watcher just switches to polling.
+- `metadata_providers_path` option: drop custom metadata provider `.py` files in that folder and they are installed next to CWA's built-in providers on start. A file named like a built-in provider is skipped, so built-ins are never overwritten; removing a file uninstalls it on the next restart.
+- Consistent SQLite backups. Home Assistant backs add-ons up by copying their files while they run, which can capture a damaged or out-of-date copy of a database in use. A `backup_pre` hook now snapshots every SQLite database in `/data` and `/addon_config` (CWA's `app.db` and `cwa.db`, the library's `metadata.db`) with SQLite's backup API, and `backup_post` removes the snapshots. The snapshots are listed in `/data/.cwa-backup-snapshots`; when the add-on starts with that list present (a restored backup), the snapshots replace the copied database files before CWA opens them. A normal start finds no list and does no searching.
+- A startup warning for each path option that is not part of the add-on's own backups (anything outside `/addon_config`, `/data` and the SMB share).
+- Custom AppArmor profile (`apparmor.txt`) replacing `apparmor: false`. It is Docker's default container profile plus the specific mounts the add-on makes. Home Assistant's security rating goes from 3 to 5.
+
+### Changed
+
+- The default `library_path`, `ingest_path` and `plugins_path` moved from `/share/calibre/...` to the add-on's own config folder (`/addon_config/...`, `addon_configs/<id>_calibre-web-automated` on the host and over Samba), so they are part of the add-on's backups. An install that never changed these options and still has its data in the old `/share/calibre/...` folders keeps using them, with a warning in the log. Options you set yourself are not changed.
+- CWA's `/config` (app database, users, settings) now always lives on the add-on's local `/data`, so only the library and ingest folders sit on network storage. SQLite's locking is not reliable over the network, and `/data` is part of Home Assistant backups. `config_path` is deprecated and no longer in the default options. On first start, the add-on imports CWA's config once from `config_path` (or from the old default `/share/calibre/config` if `config_path` was never saved), as long as `/data` has no `app.db` yet. The old copy is left in place.
+- Updated the bundled Tailscale client from 1.96.4 to 1.102.3.
+
+### Fixed
+
+- Clearing an optional option in the UI (for example `config_path`, `plugins_path`, `cloudflare_team_domain` or `hardcover_token`) made the add-on read it as the literal string `null`. A cleared `config_path` then failed startup with `config_path must be an absolute path (got: null)`.
+- Crash on start with `network_share_mode` on (set, or turned on because `library_path` is on `smb_share`): `app.db is not writable` followed by `sqlite3.OperationalError: attempt to write a readonly database` during migration. Root cause: upstream's `cwa-init` skips its `chown -R abc:abc /config` whenever `NETWORK_SHARE_MODE` is on, so state written under another uid stays unwritable — typically an `app.db` created by the 4.0.6-based add-on, which ran as uid 911 before this image pinned `PUID=1000`, and copied into `/data` by hand. With `network_share_mode` on, the add-on now re-owns anything under `/config` that isn't already `1000:1000` (except the Supervisor's `options.json` and Tailscale's state, which stay root-only), and if `app.db` is still not writable logs an error naming the cause instead of leaving it to a traceback.
+
 ## [4.1.40.1] - 2026-08-24
 
 ### Added

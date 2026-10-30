@@ -156,13 +156,21 @@ def test_device_cache_keeps_other_controls(tmp_path: Path) -> None:
     path = str(tmp_path / "device.json")
     options = Options()
     config.save_device_cache(
-        "aaaaaaaaaaaa", key="key-one-aaaaaaaa", encryption_version=1,
-        properties=["Pow"], options=options, path=path,
+        "aaaaaaaaaaaa",
+        key="key-one-aaaaaaaa",
+        encryption_version=1,
+        properties=["Pow"],
+        options=options,
+        path=path,
     )
 
     config.save_device_cache(
-        "bbbbbbbbbbbb", key="key-two-bbbbbbbb", encryption_version=1,
-        properties=["Pow"], options=options, path=path,
+        "bbbbbbbbbbbb",
+        key="key-two-bbbbbbbb",
+        encryption_version=1,
+        properties=["Pow"],
+        options=options,
+        path=path,
     )
 
     assert set(config.load_device_cache(path)) == {"aaaaaaaaaaaa", "bbbbbbbbbbbb"}
@@ -172,8 +180,12 @@ def test_changing_the_probe_options_discards_cached_capabilities(tmp_path: Path)
     """Otherwise an edited ignore list would keep publishing the old entities."""
     path = str(tmp_path / "device.json")
     config.save_device_cache(
-        "502cc6aabbcc", key="St8Vw1Yz4Bc7Ted6", encryption_version=1,
-        properties=["Pow", "Mod", "SetTem", "Lig"], options=Options(), path=path,
+        "502cc6aabbcc",
+        key="St8Vw1Yz4Bc7Ted6",
+        encryption_version=1,
+        properties=["Pow", "Mod", "SetTem", "Lig"],
+        options=Options(),
+        path=path,
     )
 
     entry = config.cached_device("502cc6aabbcc", Options(ignored_properties=["Lig"]), path)
@@ -185,8 +197,12 @@ def test_changing_the_probe_options_discards_cached_capabilities(tmp_path: Path)
 def test_reordering_the_probe_options_keeps_the_cache(tmp_path: Path) -> None:
     path = str(tmp_path / "device.json")
     config.save_device_cache(
-        "502cc6aabbcc", key="St8Vw1Yz4Bc7Ted6", encryption_version=1,
-        properties=["Pow"], options=Options(extra_properties=["A", "B"]), path=path,
+        "502cc6aabbcc",
+        key="St8Vw1Yz4Bc7Ted6",
+        encryption_version=1,
+        properties=["Pow"],
+        options=Options(extra_properties=["A", "B"]),
+        path=path,
     )
 
     entry = config.cached_device("502cc6aabbcc", Options(extra_properties=["B", "A"]), path)

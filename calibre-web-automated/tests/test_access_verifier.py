@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # SPDX-License-Identifier: MIT
 #
 # Offline tests for the Cloudflare Access JWT verifier
@@ -56,7 +55,7 @@ class _StubJWKClient:
 
 
 def _claims(**overrides):
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = datetime.datetime.now(datetime.UTC)
     claims = {
         "aud": AUD,
         "iss": ISSUER,
@@ -119,10 +118,8 @@ class VerifierTest(unittest.TestCase):
         self.assertEqual((status, user), (401, None))
 
     def test_expired_token_denied(self):
-        past = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=2)
-        status, user = self._request(
-            _token(iat=past, exp=past + datetime.timedelta(minutes=5))
-        )
+        past = datetime.datetime.now(datetime.UTC) - datetime.timedelta(hours=2)
+        status, user = self._request(_token(iat=past, exp=past + datetime.timedelta(minutes=5)))
         self.assertEqual((status, user), (401, None))
 
     def test_missing_expiry_denied(self):

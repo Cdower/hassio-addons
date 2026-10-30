@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # SPDX-License-Identifier: MIT
 #
 # Offline tests for the Cloudflare Access app.db reconciler
@@ -79,10 +78,23 @@ def _make_db(path, migrated=False):
             "    theme INTEGER DEFAULT 0,\n"
             "    kindle_mail_subject VARCHAR(256),\n"
             "    auto_send_enabled BOOLEAN DEFAULT 0,\n"
-            "    allow_additional_ereader_emails BOOLEAN DEFAULT 1\n",
+            "    allow_additional_ereader_emails BOOLEAN DEFAULT 1,\n"
+            "    ui_font_body VARCHAR DEFAULT '',\n"
+            "    ui_font_display VARCHAR DEFAULT '',\n"
+            "    has_own_library BOOLEAN NOT NULL DEFAULT 0,\n"
+            "    user_library_seeded BOOLEAN NOT NULL DEFAULT 0,\n"
+            "    my_library_intro_dismissed BOOLEAN NOT NULL DEFAULT 0\n",
         )
     con.execute(user_sql)
-    con.execute(SETTINGS_SQL)
+    settings_sql = SETTINGS_SQL
+    if migrated:
+        settings_sql = settings_sql.replace(
+            "    config_reverse_proxy_login_header_name VARCHAR\n",
+            "    config_reverse_proxy_login_header_name VARCHAR,\n"
+            "    config_default_ui_font_body VARCHAR DEFAULT 'serif',\n"
+            "    config_default_ui_font_display VARCHAR DEFAULT 'bogus'\n",
+        )
+    con.execute(settings_sql)
     con.execute(
         "INSERT INTO settings (config_default_role, config_default_show, "
         "config_default_locale, config_default_language, "
@@ -138,18 +150,14 @@ class SetupAccessTest(unittest.TestCase):
         )
         # Password must be non-empty (unusable random hash) or '' fallback —
         # never a guessable value. With werkzeug installed we expect a hash.
-        (password,) = self._query(
-            "SELECT password FROM user WHERE name = 'alice@gmail.com'"
-        )[0]
+        (password,) = self._query("SELECT password FROM user WHERE name = 'alice@gmail.com'")[0]
         self.assertTrue(password == "" or ":" in password)
 
     def test_enable_is_idempotent_and_case_insensitive(self):
         _make_db(self.db)
         self.assertEqual(_run("enable", self.db, ["alice@gmail.com"]), 0)
         self.assertEqual(_run("enable", self.db, ["ALICE@gmail.com"]), 0)
-        (count,) = self._query(
-            "SELECT COUNT(*) FROM user WHERE lower(name) = 'alice@gmail.com'"
-        )[0]
+        (count,) = self._query("SELECT COUNT(*) FROM user WHERE lower(name) = 'alice@gmail.com'")[0]
         self.assertEqual(count, 1)
 
     def test_invalid_emails_skipped(self):
@@ -176,10 +184,12 @@ class SetupAccessTest(unittest.TestCase):
         self.assertEqual(_run("enable", self.db, ["alice@gmail.com"]), 0)
         rows = self._query(
             "SELECT theme, kobo_only_shelves_sync, opds_only_shelves_sync, "
-            "auto_send_enabled, allow_additional_ereader_emails "
+            "auto_send_enabled, allow_additional_ereader_emails, "
+            "ui_font_body, ui_font_display, has_own_library "
             "FROM user WHERE name = 'alice@gmail.com'"
         )
-        self.assertEqual(rows, [(1, 0, 0, 0, 1)])
+        # 'bogus' is outside upstream's font allowlist, so it degrades to "".
+        self.assertEqual(rows, [(1, 1, 0, 0, 1, "serif", "", 0)])
 
     def test_user_schema_mismatch_skips_creation_but_enables_login(self):
         _make_db(self.db)
@@ -189,9 +199,7 @@ class SetupAccessTest(unittest.TestCase):
         con.close()
         rc = _run("enable", self.db, ["alice@gmail.com"])
         self.assertEqual(rc, 0)  # never blocks startup
-        (flag,) = self._query(
-            "SELECT config_allow_reverse_proxy_header_login FROM settings"
-        )[0]
+        (flag,) = self._query("SELECT config_allow_reverse_proxy_header_login FROM settings")[0]
         self.assertEqual(flag, 1)
         rows = self._query("SELECT name FROM user WHERE name != 'admin'")
         self.assertEqual(rows, [])
@@ -200,8 +208,7 @@ class SetupAccessTest(unittest.TestCase):
         _make_db(self.db)
         con = sqlite3.connect(self.db)
         con.execute(
-            "ALTER TABLE settings RENAME COLUMN "
-            "config_allow_reverse_proxy_header_login TO nope"
+            "ALTER TABLE settings RENAME COLUMN config_allow_reverse_proxy_header_login TO nope"
         )
         con.commit()
         con.close()
@@ -214,9 +221,7 @@ class SetupAccessTest(unittest.TestCase):
         _make_db(self.db)
         self.assertEqual(_run("enable", self.db), 0)
         self.assertEqual(_run("disable", self.db), 0)
-        (flag,) = self._query(
-            "SELECT config_allow_reverse_proxy_header_login FROM settings"
-        )[0]
+        (flag,) = self._query("SELECT config_allow_reverse_proxy_header_login FROM settings")[0]
         self.assertEqual(flag, 0)
 
     def test_warn_if_enabled_never_fails(self):

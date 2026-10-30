@@ -10,6 +10,16 @@ The add-on rebases the upstream image and **overrides files inside it**, so a bu
 never just a version edit — every override must be re-diffed and every upstream
 contract re-verified.
 
+The weekly **Base image** workflow (`.github/workflows/base-image.yaml`) opens
+these bumps as PRs from `deps/base-image`. It does step 2's pins (not
+`version:`, which is left to the Bump workflow) and the changelog line, and its
+PR body lists which upstream files from steps 3 and 4 changed between the two tags
+(`.github/scripts/base-image-drift.py`). When reviewing such a PR, work on that
+branch and verify the listed files; the rest are unchanged upstream. Keep the
+script's `WATCHED` list in step with steps 3 and 4, and its `NOTES` with the
+"verified against vX" comments step 5 bumps (the workflow moves a note itself
+when the upstream files it covers are unchanged).
+
 ## 1. Get the upstream source at the new tag
 
 ```bash
@@ -38,6 +48,7 @@ blindly:
 | --- | --- | --- |
 | `rootfs/etc/s6-overlay/s6-rc.d/svc-calibre-web-automated/run` | `root/etc/s6-overlay/s6-rc.d/svc-calibre-web-automated/run` | adds optional `-i $CWA_BIND_ADDRESS` (via `BIND_ARGS`) on the `cwa-as-abc python3 -P -m cps` exec line so Cloudflare Access mode pins CWA to loopback. Security-critical: without it the auth header is spoofable. |
 | `rootfs/app/calibre-web-automated/cps/metadata_provider/arxiv.py` | `cps/metadata_provider/arxiv.py` | full replacement (arXiv provider). Check the `cps.services.Metadata` contract it implements hasn't changed. |
+| `apparmor.txt` | Docker's `docker-default` profile (moby `profiles/apparmor/template.go`) | adds mount rules for the bind mounts and the CIFS mount made by `init-cwa-paths`. If the new image adds a service that mounts anything, signals or ptraces across processes, or writes under `/proc/sys` or `/sys`, the profile must allow it or the add-on breaks only on AppArmor hosts (HAOS). |
 
 ```bash
 diff /tmp/cwa-upstream/root/etc/s6-overlay/s6-rc.d/svc-calibre-web-automated/run \
@@ -64,6 +75,34 @@ corresponding add-on code/tests must be updated:
 - Migration-added user columns (`theme`, `hardcover_token`, …):
   `grep -n "ALTER TABLE user ADD" cps/ub.py` — update the optional-column list in
   `rootfs/opt/cwa-access/setup_access.py` and the migrated fixture in the tests.
+- Metadata provider discovery: `cps/search_metadata.py` still imports every
+  file in `cps/metadata_provider/` (`os.listdir` + `importlib`) and picks up
+  `cps.services.Metadata` subclasses. `install_providers.py` relies on this to
+  add `metadata_providers_path` files; also confirm none of the new built-in
+  provider names is one users are likely to have used for a custom file.
+- `cwa-init` is still the service every CWA service waits on: the add-on makes
+  it depend on `init-cwa-metadata-providers` so providers are installed before
+  anything imports them (`ls root/etc/s6-overlay/s6-rc.d/*/dependencies.d`).
+- SQLite files CWA keeps in `/config` and the library: backups rely on
+  `rootfs/opt/cwa-backup/db_snapshot.py` snapshotting every `*.db` under
+  `/data` and `/addon_config` (`backup_pre`). A new database with another
+  extension (`grep -rhoE "/config/[A-Za-z0-9_./-]*\.(db|sqlite[0-9]?)" cps
+  scripts root`) would be backed up torn — extend the script if one appears.
+- Split library mode (`books_path` / `metadata_db_export`,
+  `rootfs/opt/cwa-split-library/`): the add-on writes `config_calibre_split`
+  and `config_calibre_split_dir` into app.db's `settings` and relies on
+  upstream honouring them everywhere book files are touched. Check:
+  `grep -n "config_calibre_split" cps/config_sql.py` (columns and
+  `get_book_path()`), `grep -n "CALIBRE_OVERRIDE_DATABASE_PATH\|split_library" scripts/ingest_processor.py`
+  (ingest hands Calibre the local metadata.db and writes files to the split
+  dir), and `grep -rLn "split\|get_book_path\|OVERRIDE_DATABASE" $(grep -rl "metadata.db\|calibre_library_dir" scripts cps/tasks cps/services)`
+  for new code that reads book files from the library dir without it. Also
+  that `scripts/auto_library.py` still only looks for metadata.db under
+  `/calibre-library` (it must not adopt the exported copy in `/calibre-books`),
+  that the oneshot is still called `cwa-auto-library` (our
+  `init-cwa-split-library` depends on it), and how `cps/content_server.py`
+  handles split mode (`grep -n split cps/content_server.py`; the add-on only
+  warns).
 - `/lsiopy` venv still exists and ships `cryptography` + `werkzeug`
   (`grep -n lsiopy Dockerfile`, `grep -in "cryptography\|werkzeug" pyproject.toml`
   in the upstream clone) — the Dockerfile pip-installs PyJWT into it and
@@ -82,6 +121,7 @@ corresponding add-on code/tests must be updated:
 prek run --all-files
 pytest calibre-web-automated/tests/ -v
 docker build --build-arg BUILD_ARCH=amd64 calibre-web-automated/
+apparmor_parser -Q -K -S -M /etc/apparmor.d/abi/4.0 calibre-web-automated/apparmor.txt > /dev/null
 ```
 
 After the build, sanity-check the image: nginx has `http_auth_request_module`

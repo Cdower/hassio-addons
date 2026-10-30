@@ -55,9 +55,7 @@ class Bridge:
     # --- lifecycle ---------------------------------------------------------
 
     def start(self) -> None:
-        _LOGGER.info(
-            "Connecting to MQTT broker at %s:%s", self.settings.host, self.settings.port
-        )
+        _LOGGER.info("Connecting to MQTT broker at %s:%s", self.settings.host, self.settings.port)
         self.client.connect(self.settings.host, self.settings.port, keepalive=60)
         self.client.loop_start()
 

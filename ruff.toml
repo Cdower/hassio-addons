@@ -1,0 +1,22 @@
+# Ruff configuration (https://docs.astral.sh/ruff/). Run by prek (see prek.toml)
+# as `ruff check` and `ruff format`.
+
+# Match the Python shipped by the add-on base images (see the Dockerfiles);
+# keep in step with python-version in .github/workflows/ci.yaml.
+target-version = "py313"
+line-length = 100
+# Where the add-on packages live, so isort groups them as first-party rather
+# than as dependencies.
+src = [".", "acpro-thermostat/rootfs/opt/acpro", "acpro-thermostat/tests"]
+
+[lint]
+# Spelled out rather than extend-select, so the rule set does not move when a
+# ruff release changes its defaults.
+select = [
+  "E4", "E7", "E9", "F", # pyflakes and the core pycodestyle errors
+  "W",   # pycodestyle warnings
+  "I",   # isort
+  "UP",  # pyupgrade
+  "B",   # flake8-bugbear
+  "SIM", # flake8-simplify
+]

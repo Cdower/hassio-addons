@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # SPDX-License-Identifier: MIT
 #
 # Reconcile Calibre-Web's reverse-proxy header login with the add-on's
@@ -30,14 +29,29 @@ EMAIL_RE = re.compile(r"^[!-9;-?A-~]{1,64}@[!-9;-?A-~]{1,255}$")
 # Columns the INSERT relies on; all present since long before the pinned base
 # image (cwa-init creates app.db via the app itself, fully migrated).
 REQUIRED_USER_COLS = {
-    "name", "email", "password", "role", "locale", "sidebar_view",
-    "default_language", "denied_tags", "allowed_tags",
-    "denied_column_value", "allowed_column_value",
+    "name",
+    "email",
+    "password",
+    "role",
+    "locale",
+    "sidebar_view",
+    "default_language",
+    "denied_tags",
+    "allowed_tags",
+    "denied_column_value",
+    "allowed_column_value",
 }
 REQUIRED_SETTINGS_COLS = {
     "config_allow_reverse_proxy_header_login",
     "config_reverse_proxy_login_header_name",
 }
+# Instance UI-font defaults copied onto new accounts, with upstream's
+# allowlist (cps/ui_font_preferences.py); anything else degrades to "".
+UI_FONT_DEFAULTS = {
+    "ui_font_body": "config_default_ui_font_body",
+    "ui_font_display": "config_default_ui_font_display",
+}
+UI_FONT_ALLOWED = frozenset({"", "system-sans", "serif", "mono"})
 
 
 def log(msg):
@@ -63,15 +77,18 @@ def create_users(con, emails):
     user_cols = table_cols(con, "user")
     missing = REQUIRED_USER_COLS - user_cols
     if missing:
-        log(f"user table is missing columns {sorted(missing)} — "
-            "skipping user creation (upstream schema changed?)")
+        log(
+            f"user table is missing columns {sorted(missing)} — "
+            "skipping user creation (upstream schema changed?)"
+        )
         return
 
     cur = con.execute("SELECT * FROM settings LIMIT 1")
     settings_row = cur.fetchone()
     settings = (
-        dict(zip([d[0] for d in cur.description], settings_row))
-        if settings_row else {}
+        dict(zip([d[0] for d in cur.description], settings_row, strict=True))
+        if settings_row
+        else {}
     )
 
     for raw in emails:
@@ -81,13 +98,11 @@ def create_users(con, emails):
         if not EMAIL_RE.match(email):
             log(f"skipping invalid access_users entry: {raw!r}")
             continue
-        if con.execute(
-            "SELECT 1 FROM user WHERE lower(name) = ?", (email,)
-        ).fetchone():
+        if con.execute("SELECT 1 FROM user WHERE lower(name) = ?", (email,)).fetchone():
             continue
 
         # Mirror upstream create_authenticated_user() defaults
-        # (cps/usermanagement.py @ v4.0.6).
+        # (cps/usermanagement.py @ calibre-web-nextgen v4.1.58).
         row = {
             "name": email,
             "email": email,
@@ -107,7 +122,7 @@ def create_users(con, emails):
             ("kindle_mail", ""),
             ("kindle_mail_subject", ""),
             ("view_settings", "{}"),
-            ("kobo_only_shelves_sync", 0),
+            ("kobo_only_shelves_sync", 1),
             ("opds_only_shelves_sync", 0),
             ("theme", 1),
             ("hardcover_token", ""),
@@ -116,13 +131,18 @@ def create_users(con, emails):
         ):
             if col in user_cols:
                 row[col] = val
+        for col, setting in UI_FONT_DEFAULTS.items():
+            if col in user_cols:
+                val = settings.get(setting)
+                row[col] = val if val in UI_FONT_ALLOWED else ""
 
         columns = ", ".join(row)
         placeholders = ", ".join(f":{k}" for k in row)
+        # Column names come from the fixed dicts above, never from input; the
+        # values are bound as named parameters.
+        insert = f"INSERT INTO user ({columns}) VALUES ({placeholders})"  # nosec B608
         try:
-            con.execute(
-                f"INSERT INTO user ({columns}) VALUES ({placeholders})", row
-            )
+            con.execute(insert, row)
             con.commit()
             log(f"created CWA user '{email}'")
         except sqlite3.Error as exc:
@@ -133,8 +153,10 @@ def create_users(con, emails):
 def enable(con, emails):
     missing = REQUIRED_SETTINGS_COLS - table_cols(con, "settings")
     if missing:
-        log(f"settings table is missing columns {sorted(missing)} — "
-            "cannot enable reverse-proxy header login (upstream schema changed?)")
+        log(
+            f"settings table is missing columns {sorted(missing)} — "
+            "cannot enable reverse-proxy header login (upstream schema changed?)"
+        )
         return 1
     con.execute(
         "UPDATE settings SET config_allow_reverse_proxy_header_login = 1, "
@@ -164,11 +186,13 @@ def warn_if_enabled(con):
         "SELECT config_allow_reverse_proxy_header_login FROM settings LIMIT 1"
     ).fetchone()
     if row and row[0]:
-        log("WARNING: reverse-proxy header login is enabled in app.db but "
+        log(
+            "WARNING: reverse-proxy header login is enabled in app.db but "
             "Cloudflare Access mode is off — CWA is directly exposed, so "
             "anyone who can reach it can impersonate users by sending the "
             "login header. Disable it in CWA's admin settings unless another "
-            "trusted auth proxy is in front.")
+            "trusted auth proxy is in front."
+        )
     return 0
 
 

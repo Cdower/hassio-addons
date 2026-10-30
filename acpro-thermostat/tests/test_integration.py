@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import socket
 import threading
-from typing import Iterator
+from collections.abc import Iterator
 
 import pytest
 
 from acpro_thermostat import device as device_module
 from acpro_thermostat.device import Transport
 from acpro_thermostat.entities import EntityMap
-
 from test_device import MAC, FakeControl
 
 
@@ -42,7 +41,7 @@ class ControlServer:
         while not self._stop.is_set():
             try:
                 datagram, sender = self._socket.recvfrom(4096)
-            except socket.timeout:
+            except TimeoutError:
                 continue
             except OSError:
                 return
@@ -113,6 +112,6 @@ def test_discover_bind_probe_and_control_over_real_sockets(server: ControlServer
 def test_a_control_that_never_answers_is_reported() -> None:
     with Transport(timeout=0.2) as transport:
         # Nothing is listening on this port, so discovery comes back empty.
-        assert device_module.discover(
-            transport, targets=["127.0.0.1"], port=59999, duration=0.4
-        ) == []
+        assert (
+            device_module.discover(transport, targets=["127.0.0.1"], port=59999, duration=0.4) == []
+        )
