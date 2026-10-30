@@ -32,17 +32,17 @@ CANDIDATE_PROPERTIES: Final = (
     PROP_TEMP_HALF,
     PROP_FAN_SPEED,
     PROP_CURRENT_TEMP,
-    "StHt",          # auxiliary / electric heat stage
-    "SvSt",          # energy saving
-    "Quiet",         # quiet operation
-    "Tur",           # turbo / boost
-    "SwhSlp",        # sleep schedule
-    "Lig",           # panel backlight
-    "Health",        # ioniser
-    "Blo",           # post-run blower ("X-Fan")
-    "Air",           # fresh air damper
-    "SwUpDn",        # vertical louvre
-    "SwingLfRig",    # horizontal louvre
+    "StHt",  # auxiliary / electric heat stage
+    "SvSt",  # energy saving
+    "Quiet",  # quiet operation
+    "Tur",  # turbo / boost
+    "SwhSlp",  # sleep schedule
+    "Lig",  # panel backlight
+    "Health",  # ioniser
+    "Blo",  # post-run blower ("X-Fan")
+    "Air",  # fresh air damper
+    "SwUpDn",  # vertical louvre
+    "SwingLfRig",  # horizontal louvre
     "AntiDirectBlow",
     "HeatCoolType",
 )

@@ -106,8 +106,7 @@ class Schedule:
             self.changed_at = now
         if self.pending_since is None:
             self.pending_since = now
-        return (now - self.changed_at >= self.settle
-                or now - self.pending_since >= self.max_delay)
+        return now - self.changed_at >= self.settle or now - self.pending_since >= self.max_delay
 
     def done(self, signature):
         """signature: what the database looked like when the export began,
@@ -152,11 +151,12 @@ class Exporter:
 
     def export(self):
         if self.written is not None and self.target_state() != self.written:
-            log(f"WARNING: {self.target} was changed by something other than "
+            log(
+                f"WARNING: {self.target} was changed by something other than "
                 "this add-on; replacing it. It is a read-only copy: make "
-                "changes in CWA.")
-        fd, local_tmp = tempfile.mkstemp(
-            prefix="metadata-export-", suffix=".db", dir=self.tmp_dir)
+                "changes in CWA."
+            )
+        fd, local_tmp = tempfile.mkstemp(prefix="metadata-export-", suffix=".db", dir=self.tmp_dir)
         os.close(fd)
         try:
             self.snapshot(local_tmp)
@@ -238,8 +238,10 @@ def main(argv=None):
 
     threading.Thread(target=wait_for_stop_signal, daemon=True).start()
 
-    log(f"exporting {args.source} to {args.target_dir} after each change "
-        f"(checked every {args.interval:g}s)")
+    log(
+        f"exporting {args.source} to {args.target_dir} after each change "
+        f"(checked every {args.interval:g}s)"
+    )
     run(
         Exporter(args.source, args.target_dir, args.tmp_dir),
         Schedule(args.settle, args.max_delay),

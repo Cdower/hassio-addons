@@ -74,6 +74,9 @@ rev = "25bcf95026b96e2dd3c0aec3090c3d6ef6ca2e6c" # "v0.17.3"
 [[repos.hooks]]
 id = "ruff-check"
 
+[[repos.hooks]]
+id = "ruff-format"
+
 [[repos]]
 repo = "https://github.com/PyCQA/bandit"
 rev = "92ae8b82fb422a639f0ed8d99e96cea769594e08" # "1.9.4"

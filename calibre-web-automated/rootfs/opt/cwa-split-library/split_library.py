@@ -158,9 +158,11 @@ def set_aside(path, suffix=PRE_SPLIT_SUFFIX):
                 os.rename(path + side, target + side)
         remove(path + "-shm")
     except OSError as exc:
-        log(f"WARNING: could not rename {path} to {target}: {exc}. "
+        log(
+            f"WARNING: could not rename {path} to {target}: {exc}. "
             "It is no longer used; delete it so it is not mistaken for the "
-            "live database.")
+            "live database."
+        )
         return None
     return target
 
@@ -170,7 +172,8 @@ def book_folders(directory):
     like (one per author)."""
     try:
         return sorted(
-            entry.name for entry in os.scandir(directory)
+            entry.name
+            for entry in os.scandir(directory)
             if entry.is_dir() and not entry.name.startswith(".")
         )
     except FileNotFoundError:
@@ -203,13 +206,14 @@ def restore_export(local, local_books, shared, staging, uid, gid, why):
     """Install the metadata_db_export copy in books_path as the live
     database. Its age is logged: the copy may be stale if the export was
     turned off at some point."""
-    written = time.strftime(
-        "%Y-%m-%d %H:%M", time.localtime(os.path.getmtime(shared)))
+    written = time.strftime("%Y-%m-%d %H:%M", time.localtime(os.path.getmtime(shared)))
     staged, shared_books = stage_or_fail(shared, staging)
     install(staged, local, local_books, uid, gid)
-    log(f"{why}: restored the library database from the metadata_db_export "
+    log(
+        f"{why}: restored the library database from the metadata_db_export "
         f"copy {shared} ({shared_books} books, last written {written}). "
-        "Changes made after that time are not in it.")
+        "Changes made after that time are not in it."
+    )
     return "restored-export"
 
 
@@ -225,19 +229,18 @@ def first_setup(local, local_books, shared, staging, uid, gid):
             "clear which one CWA should use. Keep the one you want: "
             f"rename or delete the other (if {shared} is the add-on's "
             "own metadata_db_export copy, delete that one), then "
-            "restart.")
+            "restart."
+        )
     if local_books:
         log(f"{shared} holds no books; keeping {local}")
         outcome = "kept-local"
     else:
         install(staged, local, local_books, uid, gid)
-        log(f"moved the library database from {shared} to {local} "
-            f"({shared_books} books)")
+        log(f"moved the library database from {shared} to {local} ({shared_books} books)")
         outcome = "imported"
     renamed = set_aside(shared)
     if renamed:
-        log(f"the copy left in books_path is now {renamed} and is no "
-            "longer used")
+        log(f"the copy left in books_path is now {renamed} and is no longer used")
     return outcome
 
 
@@ -256,28 +259,37 @@ def library_moved(previous_dir, local, local_books, shared, staging, uid, gid):
                 f"library_path changed from {previous_dir}, and both {previous} "
                 f"({previous_books} books) and {local} ({local_books} books) "
                 "hold a library for the same books_path. Keep the one you "
-                "want: rename or delete the other, then restart.")
-        log(f"library_path changed from {previous_dir}; using the library "
-            f"already in {local}")
+                "want: rename or delete the other, then restart."
+            )
+        log(f"library_path changed from {previous_dir}; using the library already in {local}")
         return "kept-local"
     if previous_books is not None:
         install(staged, local, local_books, uid, gid)
-        log(f"library_path changed: moved the library database from "
-            f"{previous} to {local} ({previous_books} books)")
+        log(
+            f"library_path changed: moved the library database from "
+            f"{previous} to {local} ({previous_books} books)"
+        )
         renamed = set_aside(previous, MOVED_SUFFIX)
         if renamed:
-            log(f"the copy left in the old library_path is now {renamed} and "
-                "is no longer used")
+            log(f"the copy left in the old library_path is now {renamed} and is no longer used")
         return "moved"
     if os.path.exists(shared):
         return restore_export(
-            local, local_books, shared, staging, uid, gid,
-            f"library_path changed and {previous} is gone")
+            local,
+            local_books,
+            shared,
+            staging,
+            uid,
+            gid,
+            f"library_path changed and {previous} is gone",
+        )
     if local_books is None:
-        log(f"WARNING: library_path changed from {previous_dir}, but there is "
+        log(
+            f"WARNING: library_path changed from {previous_dir}, but there is "
             f"no {METADATA_DB} there or in books_path: CWA starts a new, "
             "empty library. Copy the library's metadata.db into "
-            f"{os.path.dirname(local)} to use the books in books_path.")
+            f"{os.path.dirname(local)} to use the books in books_path."
+        )
         return "new"
     return "kept-local"
 
@@ -302,24 +314,27 @@ def prepare(library_dir, books_dir, state_path, uid=1000, gid=1000):
         local_books = count_books(local) if os.path.exists(local) else None
         if unchanged:
             outcome = restore_export(
-                local, local_books, shared, staging, uid, gid,
-                f"{local} is missing")
+                local, local_books, shared, staging, uid, gid, f"{local} is missing"
+            )
         elif state is not None and state[1] == books_dir:
-            outcome = library_moved(
-                state[0], local, local_books, shared, staging, uid, gid)
+            outcome = library_moved(state[0], local, local_books, shared, staging, uid, gid)
         else:
             outcome = first_setup(local, local_books, shared, staging, uid, gid)
             if outcome == "new" and book_folders(books_dir):
-                log(f"WARNING: {books_dir} has folders but no {METADATA_DB}, "
+                log(
+                    f"WARNING: {books_dir} has folders but no {METADATA_DB}, "
                     f"and {library_dir} has none either: CWA starts a new, "
                     "empty library. Put the library's metadata.db in "
-                    "library_path to use the books already there.")
+                    "library_path to use the books already there."
+                )
         stray = book_folders(library_dir) if outcome == "kept-local" else []
         if stray:
-            log(f"WARNING: {library_dir} still has folders "
+            log(
+                f"WARNING: {library_dir} still has folders "
                 f"({', '.join(stray[:3])}, ...). With "
                 "books_path set, CWA looks for book files only in "
-                f"{books_dir}: move the book folders there.")
+                f"{books_dir}: move the book folders there."
+            )
     finally:
         shutil.rmtree(staging, ignore_errors=True)
 
@@ -340,12 +355,13 @@ def enable(con, books_dir):
     cols = table_cols(con, "settings")
     missing = REQUIRED_SETTINGS_COLS - cols
     if missing:
-        log(f"settings table is missing columns {sorted(missing)} — cannot "
-            "enable split library mode (upstream schema changed?)")
+        log(
+            f"settings table is missing columns {sorted(missing)} — cannot "
+            "enable split library mode (upstream schema changed?)"
+        )
         return 1
     cur = con.execute(
-        "UPDATE settings SET config_calibre_split = 1, "
-        "config_calibre_split_dir = ?",
+        "UPDATE settings SET config_calibre_split = 1, config_calibre_split_dir = ?",
         (books_dir,),
     )
     if cur.rowcount < 1:
@@ -354,13 +370,13 @@ def enable(con, books_dir):
     con.commit()
     log(f"split library mode enabled: book files in {books_dir}")
     if "config_calibre_server_enabled" in cols:
-        row = con.execute(
-            "SELECT config_calibre_server_enabled FROM settings LIMIT 1"
-        ).fetchone()
+        row = con.execute("SELECT config_calibre_server_enabled FROM settings LIMIT 1").fetchone()
         if row and row[0]:
-            log("WARNING: the Calibre content server does not support split "
+            log(
+                "WARNING: the Calibre content server does not support split "
                 "library mode and will not start. Disable it in CWA's admin "
-                "settings, or clear books_path.")
+                "settings, or clear books_path."
+            )
     return 0
 
 
@@ -391,7 +407,9 @@ def main(argv=None):
     if args.action == "prepare":
         try:
             prepare(
-                args.library, args.books, args.state,
+                args.library,
+                args.books,
+                args.state,
                 int(os.environ.get("PUID", "1000")),
                 int(os.environ.get("PGID", "1000")),
             )

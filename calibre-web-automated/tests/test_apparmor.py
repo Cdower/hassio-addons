@@ -16,7 +16,12 @@ import unittest
 HERE = os.path.dirname(os.path.abspath(__file__))
 ADDON_ROOT = os.path.dirname(HERE)
 INIT_PATHS = os.path.join(
-    ADDON_ROOT, "rootfs", "etc", "s6-overlay", "scripts", "init-cwa-paths",
+    ADDON_ROOT,
+    "rootfs",
+    "etc",
+    "s6-overlay",
+    "scripts",
+    "init-cwa-paths",
 )
 PROFILE = os.path.join(ADDON_ROOT, "apparmor.txt")
 
@@ -63,7 +68,9 @@ class SmbCapabilitiesTest(unittest.TestCase):
         config = read(os.path.join(ADDON_ROOT, "config.yaml"))
         # Items may carry a trailing comment or whitespace.
         block = re.search(
-            r"^privileged:\n((?:[ \t]+-[ \t]*\S+[ \t]*(?:#.*)?\n)+)", config, re.M,
+            r"^privileged:\n((?:[ \t]+-[ \t]*\S+[ \t]*(?:#.*)?\n)+)",
+            config,
+            re.M,
         )
         self.assertIsNotNone(block, "no privileged list in config.yaml")
         caps = re.findall(r"^[ \t]+-[ \t]*([^\s#]+)", block.group(1), re.M)
@@ -72,7 +79,8 @@ class SmbCapabilitiesTest(unittest.TestCase):
 
     def test_dac_read_search_use_is_denied(self):
         self.assertRegex(
-            read(PROFILE), r"(?m)^\s*deny\s+capability\s+dac_read_search\s*,",
+            read(PROFILE),
+            r"(?m)^\s*deny\s+capability\s+dac_read_search\s*,",
         )
 
 

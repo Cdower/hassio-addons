@@ -23,7 +23,11 @@ import unittest
 HERE = os.path.dirname(os.path.abspath(__file__))
 ADDON_ROOT = os.path.dirname(HERE)
 EXPORT_PATH = os.path.join(
-    ADDON_ROOT, "rootfs", "opt", "cwa-split-library", "metadata_export.py",
+    ADDON_ROOT,
+    "rootfs",
+    "opt",
+    "cwa-split-library",
+    "metadata_export.py",
 )
 
 spec = importlib.util.spec_from_file_location("cwa_metadata_export", EXPORT_PATH)
@@ -183,7 +187,7 @@ class ExporterTest(unittest.TestCase):
                 time.sleep(0.01)
             self.assertEqual(titles(self.target), ["Dune"])
             # A change right before stopping is exported by the final pass.
-            schedule.settle = schedule.max_delay = 10 ** 9
+            schedule.settle = schedule.max_delay = 10**9
             self.add("Emma")
             stop.set()
             thread.join(5)
@@ -193,10 +197,21 @@ class ExporterTest(unittest.TestCase):
 
     def test_sigterm_makes_final_export_and_exits(self):
         proc = subprocess.Popen(
-            [sys.executable, EXPORT_PATH, "--source", self.source,
-             "--target-dir", self.books, "--tmp-dir", self.tmp,
-             "--interval", "3600"],
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+            [
+                sys.executable,
+                EXPORT_PATH,
+                "--source",
+                self.source,
+                "--target-dir",
+                self.books,
+                "--tmp-dir",
+                self.tmp,
+                "--interval",
+                "3600",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
         )
         self.addCleanup(proc.kill)
         deadline = time.monotonic() + 10

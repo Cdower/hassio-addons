@@ -88,9 +88,7 @@ def test_decrypt_any_needs_a_pack() -> None:
 def test_build_datagram_shape() -> None:
     cipher = protocol.generic_cipher(1)
 
-    envelope = json.loads(
-        protocol.build_datagram(cipher, {"t": "bind"}, tcid="502cc6aabbcc", i=1)
-    )
+    envelope = json.loads(protocol.build_datagram(cipher, {"t": "bind"}, tcid="502cc6aabbcc", i=1))
 
     assert envelope["t"] == "pack"
     assert envelope["i"] == 1

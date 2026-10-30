@@ -210,9 +210,7 @@ def test_probe_keeps_only_the_columns_the_control_answers(control: FakeControl) 
 
 def test_probe_works_when_the_control_answers_partially() -> None:
     """Firmware that ignores unknown columns instead of dropping the request."""
-    control = FakeControl(
-        supported={"Pow": 1, "Mod": 1, "SetTem": 22, "TemSen": 61}, strict=False
-    )
+    control = FakeControl(supported={"Pow": 1, "Mod": 1, "SetTem": 22, "TemSen": 61}, strict=False)
     device = _bound(control)
 
     assert device.probe() == ["Pow", "Mod", "SetTem", "TemSen"]
@@ -270,9 +268,7 @@ def test_refresh_with_no_probed_columns_stays_quiet(control: FakeControl) -> Non
 
 
 def test_zip_columns_drops_values_that_are_not_numbers() -> None:
-    paired = device_module._zip_columns(
-        ["Pow", "Mod", "SetTem", "Bogus"], [1, None, 22.0, "nope"]
-    )
+    paired = device_module._zip_columns(["Pow", "Mod", "SetTem", "Bogus"], [1, None, 22.0, "nope"])
 
     assert paired == {"Pow": 1, "SetTem": 22}
 

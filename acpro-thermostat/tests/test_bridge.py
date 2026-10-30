@@ -136,9 +136,7 @@ def test_connecting_publishes_discovery_and_subscribes(bridge: Bridge) -> None:
     bridge._on_connect(bridge.client, None, None, 0)
 
     assert bridge.client.subscriptions == bridge.map.command_topics()
-    assert (
-        "homeassistant/climate/acpro_502cc6aabbcc/thermostat/config" in bridge.client.topics()
-    )
+    assert "homeassistant/climate/acpro_502cc6aabbcc/thermostat/config" in bridge.client.topics()
     assert bridge.client.last("acpro/status") == PAYLOAD_ONLINE
     assert json.loads(bridge.client.last("acpro/acpro_502cc6aabbcc/state"))["mode"] == "cool"
 
@@ -153,9 +151,7 @@ def test_a_refused_connection_publishes_nothing(bridge: Bridge) -> None:
 def test_discovery_is_retained_so_entities_survive_a_restart(bridge: Bridge) -> None:
     bridge.publish_discovery(force=True)
 
-    retained = {
-        topic for topic, _payload, retain in bridge.client.published if retain
-    }
+    retained = {topic for topic, _payload, retain in bridge.client.published if retain}
     assert "homeassistant/switch/acpro_502cc6aabbcc/lig/config" in retained
     assert "homeassistant/sensor/acpro_502cc6aabbcc/indoor_temperature/config" in retained
 

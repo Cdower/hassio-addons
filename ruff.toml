@@ -1,5 +1,5 @@
 # Ruff configuration (https://docs.astral.sh/ruff/). Run by prek (see prek.toml)
-# as `ruff check`; formatting is not enforced.
+# as `ruff check` and `ruff format`.
 
 # Match the Python shipped by the add-on base images (see the Dockerfiles).
 target-version = "py313"

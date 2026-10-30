@@ -275,8 +275,11 @@ def test_the_climate_entity_is_deliberately_unnamed(entity_map: EntityMap) -> No
 
     assert "name" in config
     assert config["name"] is None
-    assert all(payload["name"] for key, payload in entity_map.discovery_payloads().items()
-               if key != "climate/thermostat")
+    assert all(
+        payload["name"]
+        for key, payload in entity_map.discovery_payloads().items()
+        if key != "climate/thermostat"
+    )
 
 
 @pytest.mark.parametrize(
@@ -290,9 +293,7 @@ def test_the_climate_entity_is_deliberately_unnamed(entity_map: EntityMap) -> No
         ("some/other/topic", "ON"),
     ],
 )
-def test_unusable_commands_write_nothing(
-    entity_map: EntityMap, topic: str, payload: str
-) -> None:
+def test_unusable_commands_write_nothing(entity_map: EntityMap, topic: str, payload: str) -> None:
     assert entity_map.columns_for(topic, payload, {}) == {}
 
 

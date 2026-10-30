@@ -111,6 +111,6 @@ def test_discover_bind_probe_and_control_over_real_sockets(server: ControlServer
 def test_a_control_that_never_answers_is_reported() -> None:
     with Transport(timeout=0.2) as transport:
         # Nothing is listening on this port, so discovery comes back empty.
-        assert device_module.discover(
-            transport, targets=["127.0.0.1"], port=59999, duration=0.4
-        ) == []
+        assert (
+            device_module.discover(transport, targets=["127.0.0.1"], port=59999, duration=0.4) == []
+        )

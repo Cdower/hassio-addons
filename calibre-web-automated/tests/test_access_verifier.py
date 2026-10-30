@@ -119,9 +119,7 @@ class VerifierTest(unittest.TestCase):
 
     def test_expired_token_denied(self):
         past = datetime.datetime.now(datetime.UTC) - datetime.timedelta(hours=2)
-        status, user = self._request(
-            _token(iat=past, exp=past + datetime.timedelta(minutes=5))
-        )
+        status, user = self._request(_token(iat=past, exp=past + datetime.timedelta(minutes=5)))
         self.assertEqual((status, user), (401, None))
 
     def test_missing_expiry_denied(self):

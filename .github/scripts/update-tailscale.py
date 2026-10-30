@@ -8,6 +8,7 @@ earlier one that has not been released yet), that entry's target version is
 moved forward instead of adding a second line. Used by
 .github/workflows/tailscale.yaml.
 """
+
 import os
 import re
 import sys
@@ -29,9 +30,7 @@ if current is None:
 previous = current.group(1)
 
 for name, value in {"TAILSCALE_VERSION": version, **hashes}.items():
-    text, count = re.subn(
-        rf'(?m)^ARG {name}="[^"]*"$', f'ARG {name}="{value}"', text, count=1
-    )
+    text, count = re.subn(rf'(?m)^ARG {name}="[^"]*"$', f'ARG {name}="{value}"', text, count=1)
     if count != 1:
         sys.exit(f"::error::No {name} ARG found in {dockerfile}")
 with open(dockerfile, "w", encoding="utf-8") as handle:
@@ -42,8 +41,7 @@ with open(changelog, encoding="utf-8") as handle:
     lines = handle.read().splitlines()
 
 unreleased = next(
-    (i for i, line in enumerate(lines)
-     if re.match(r"(?i)^##[ \t]+\[?unreleased\]?[ \t]*$", line)),
+    (i for i, line in enumerate(lines) if re.match(r"(?i)^##[ \t]+\[?unreleased\]?[ \t]*$", line)),
     None,
 )
 if unreleased is None:
@@ -53,22 +51,14 @@ end = next(
     len(lines),
 )
 
-entry = re.compile(
-    r"^- Updated the bundled Tailscale client from (\S+) to \S+?\.$"
-)
-existing = next(
-    (i for i in range(unreleased + 1, end) if entry.match(lines[i])), None
-)
+entry = re.compile(r"^- Updated the bundled Tailscale client from (\S+) to \S+?\.$")
+existing = next((i for i in range(unreleased + 1, end) if entry.match(lines[i])), None)
 if existing is not None:
     since = entry.match(lines[existing]).group(1)
-    lines[existing] = (
-        f"- Updated the bundled Tailscale client from {since} to {version}."
-    )
+    lines[existing] = f"- Updated the bundled Tailscale client from {since} to {version}."
 else:
     line = f"- Updated the bundled Tailscale client from {previous} to {version}."
-    changed = next(
-        (i for i in range(unreleased + 1, end) if lines[i] == "### Changed"), None
-    )
+    changed = next((i for i in range(unreleased + 1, end) if lines[i] == "### Changed"), None)
     if changed is not None:
         # Append after the last bullet of the existing Changed list.
         stop = next(
@@ -79,13 +69,11 @@ else:
             (i for i in range(changed + 1, stop) if lines[i].strip()),
             default=changed + 1,
         )
-        lines[last + 1:last + 1] = [line]
+        lines[last + 1 : last + 1] = [line]
     else:
         # Keep a Changelog orders Changed after Added and before the rest.
         later = ("### Deprecated", "### Removed", "### Fixed", "### Security")
-        at = next(
-            (i for i in range(unreleased + 1, end) if lines[i] in later), end
-        )
+        at = next((i for i in range(unreleased + 1, end) if lines[i] in later), end)
         lines[at:at] = ["### Changed", "", line, ""]
         if lines[at - 1].strip():
             lines[at:at] = [""]

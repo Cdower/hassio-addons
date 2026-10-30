@@ -122,8 +122,10 @@ def install(source, dest, manifest):
             log(f"skipping {name}: not a valid Python module name")
             continue
         if name[:-3] in taken:
-            log(f"skipping {name}: a built-in provider with that name "
-                "already exists and is never overwritten — rename the file")
+            log(
+                f"skipping {name}: a built-in provider with that name "
+                "already exists and is never overwritten — rename the file"
+            )
             continue
         try:
             copy_into(path, dest, name)
@@ -152,8 +154,7 @@ def main(argv=None):
     if args.source is None:
         return 0
     if installed:
-        log(f"installed {len(installed)} custom provider(s): "
-            + ", ".join(installed))
+        log(f"installed {len(installed)} custom provider(s): " + ", ".join(installed))
     else:
         log(f"no custom providers found in {args.source}")
     return 0

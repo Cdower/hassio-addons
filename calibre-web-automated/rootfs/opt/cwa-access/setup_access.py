@@ -29,9 +29,17 @@ EMAIL_RE = re.compile(r"^[!-9;-?A-~]{1,64}@[!-9;-?A-~]{1,255}$")
 # Columns the INSERT relies on; all present since long before the pinned base
 # image (cwa-init creates app.db via the app itself, fully migrated).
 REQUIRED_USER_COLS = {
-    "name", "email", "password", "role", "locale", "sidebar_view",
-    "default_language", "denied_tags", "allowed_tags",
-    "denied_column_value", "allowed_column_value",
+    "name",
+    "email",
+    "password",
+    "role",
+    "locale",
+    "sidebar_view",
+    "default_language",
+    "denied_tags",
+    "allowed_tags",
+    "denied_column_value",
+    "allowed_column_value",
 }
 REQUIRED_SETTINGS_COLS = {
     "config_allow_reverse_proxy_header_login",
@@ -69,15 +77,18 @@ def create_users(con, emails):
     user_cols = table_cols(con, "user")
     missing = REQUIRED_USER_COLS - user_cols
     if missing:
-        log(f"user table is missing columns {sorted(missing)} — "
-            "skipping user creation (upstream schema changed?)")
+        log(
+            f"user table is missing columns {sorted(missing)} — "
+            "skipping user creation (upstream schema changed?)"
+        )
         return
 
     cur = con.execute("SELECT * FROM settings LIMIT 1")
     settings_row = cur.fetchone()
     settings = (
         dict(zip([d[0] for d in cur.description], settings_row, strict=True))
-        if settings_row else {}
+        if settings_row
+        else {}
     )
 
     for raw in emails:
@@ -87,9 +98,7 @@ def create_users(con, emails):
         if not EMAIL_RE.match(email):
             log(f"skipping invalid access_users entry: {raw!r}")
             continue
-        if con.execute(
-            "SELECT 1 FROM user WHERE lower(name) = ?", (email,)
-        ).fetchone():
+        if con.execute("SELECT 1 FROM user WHERE lower(name) = ?", (email,)).fetchone():
             continue
 
         # Mirror upstream create_authenticated_user() defaults
@@ -129,12 +138,11 @@ def create_users(con, emails):
 
         columns = ", ".join(row)
         placeholders = ", ".join(f":{k}" for k in row)
+        # Column names come from the fixed dicts above, never from input; the
+        # values are bound as named parameters.
+        insert = f"INSERT INTO user ({columns}) VALUES ({placeholders})"  # nosec B608
         try:
-            con.execute(
-                # Column names come from the fixed dicts above, never from
-                # input; the values are bound as named parameters.
-                f"INSERT INTO user ({columns}) VALUES ({placeholders})", row  # nosec B608
-            )
+            con.execute(insert, row)
             con.commit()
             log(f"created CWA user '{email}'")
         except sqlite3.Error as exc:
@@ -145,8 +153,10 @@ def create_users(con, emails):
 def enable(con, emails):
     missing = REQUIRED_SETTINGS_COLS - table_cols(con, "settings")
     if missing:
-        log(f"settings table is missing columns {sorted(missing)} — "
-            "cannot enable reverse-proxy header login (upstream schema changed?)")
+        log(
+            f"settings table is missing columns {sorted(missing)} — "
+            "cannot enable reverse-proxy header login (upstream schema changed?)"
+        )
         return 1
     con.execute(
         "UPDATE settings SET config_allow_reverse_proxy_header_login = 1, "
@@ -176,11 +186,13 @@ def warn_if_enabled(con):
         "SELECT config_allow_reverse_proxy_header_login FROM settings LIMIT 1"
     ).fetchone()
     if row and row[0]:
-        log("WARNING: reverse-proxy header login is enabled in app.db but "
+        log(
+            "WARNING: reverse-proxy header login is enabled in app.db but "
             "Cloudflare Access mode is off — CWA is directly exposed, so "
             "anyone who can reach it can impersonate users by sending the "
             "login header. Disable it in CWA's admin settings unless another "
-            "trusted auth proxy is in front.")
+            "trusted auth proxy is in front."
+        )
     return 0
 
 
