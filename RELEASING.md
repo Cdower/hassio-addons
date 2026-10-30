@@ -71,7 +71,7 @@ The attestation names the image without a tag and pins the digest, so
 `:<version>` and `:latest` verify against the same one. Images pushed before
 this was added have none.
 
-[attest]: https://github.com/actions/attest-build-provenance
+[attest]: https://github.com/actions/attest
 
 ## Republishing without a release
 

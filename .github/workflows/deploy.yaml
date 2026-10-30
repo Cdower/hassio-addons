@@ -248,7 +248,8 @@ jobs:
             BUILD_REPOSITORY=${{ github.repository }}
             BUILD_VERSION=${{ needs.discover.outputs.version }}
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        # With no predicate given, this attests SLSA build provenance.
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           # No tag: the digest identifies the image, so both `:<version>` and
           # `:latest` are covered by the one attestation.
