@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Offline tests for the arXiv metadata provider
@@ -56,7 +55,6 @@ recurrent or convolutional neural networks.  </summary>
 def _build_module():
     import abc
     import dataclasses
-    from typing import Dict, Generator, List, Optional, Union
 
     cps = types.ModuleType("cps")
     logger_mod = types.ModuleType("cps.logger")
@@ -84,24 +82,24 @@ def _build_module():
 
     @dataclasses.dataclass
     class MetaRecord:
-        id: Union[str, int]
+        id: str | int
         title: str
-        authors: List[str]
+        authors: list[str]
         url: str
         source: MetaSourceInfo
         cover: str = os.path.join(constants.STATIC_DIR, "generic_cover.svg")
-        description: Optional[str] = ""
-        series: Optional[str] = None
-        series_index: Optional[Union[int, float]] = 0
-        identifiers: Dict[str, Union[str, int]] = dataclasses.field(default_factory=dict)
-        publisher: Optional[str] = None
-        publishedDate: Optional[str] = None
-        rating: Optional[int] = 0
-        languages: Optional[List[str]] = dataclasses.field(default_factory=list)
-        tags: Optional[List[str]] = dataclasses.field(default_factory=list)
-        format: Optional[str] = None
-        confidence_score: Optional[float] = None
-        match_reason: Optional[str] = ""
+        description: str | None = ""
+        series: str | None = None
+        series_index: int | float | None = 0
+        identifiers: dict[str, str | int] = dataclasses.field(default_factory=dict)
+        publisher: str | None = None
+        publishedDate: str | None = None
+        rating: int | None = 0
+        languages: list[str] | None = dataclasses.field(default_factory=list)
+        tags: list[str] | None = dataclasses.field(default_factory=list)
+        format: str | None = None
+        confidence_score: float | None = None
+        match_reason: str | None = ""
 
     class Metadata:
         __name__ = "Generic"

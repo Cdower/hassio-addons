@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # SPDX-License-Identifier: MIT
 #
 # One-way export of the local metadata.db into `books_path` (the
@@ -30,6 +29,7 @@
 #                      [--tmp-dir DIR]
 
 import argparse
+import contextlib
 import os
 import pathlib
 import shutil
@@ -50,10 +50,8 @@ def log(msg):
 
 
 def remove(path):
-    try:
+    with contextlib.suppress(FileNotFoundError):
         os.remove(path)
-    except FileNotFoundError:
-        pass
 
 
 def file_signature(path):
@@ -211,9 +209,8 @@ def run(exporter, schedule, interval, stop, clock=time.monotonic):
             break
 
     signature = db_signature(exporter.source)
-    if signature[0] is not None and schedule.pending(signature):
-        if attempt(signature):
-            log(f"final export to {exporter.target} done")
+    if signature[0] is not None and schedule.pending(signature) and attempt(signature):
+        log(f"final export to {exporter.target} done")
 
 
 def main(argv=None):

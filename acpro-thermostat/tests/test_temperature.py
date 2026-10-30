@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from acpro_thermostat import temperature
 from acpro_thermostat.const import TEMP_MAX_C, TEMP_MIN_C
 

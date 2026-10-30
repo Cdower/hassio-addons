@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # SPDX-License-Identifier: MIT
 #
 # Split library support for the `books_path` option: metadata.db stays in
@@ -32,6 +31,7 @@
 #   split_library.py disable [--db PATH]
 
 import argparse
+import contextlib
 import json
 import os
 import pathlib
@@ -62,10 +62,8 @@ def log(msg):
 
 
 def remove(path):
-    try:
+    with contextlib.suppress(FileNotFoundError):
         os.remove(path)
-    except FileNotFoundError:
-        pass
 
 
 def read_state(path):
@@ -108,7 +106,7 @@ def count_books(path):
         try:
             return con.execute("SELECT count(*) FROM books").fetchone()[0]
         except sqlite3.OperationalError as exc:
-            raise SplitError(f"{path} is not a Calibre library database: {exc}")
+            raise SplitError(f"{path} is not a Calibre library database: {exc}") from exc
     finally:
         con.close()
 
@@ -142,7 +140,7 @@ def stage_or_fail(source, staging_dir):
     try:
         return stage(source, staging_dir)
     except (OSError, sqlite3.Error) as exc:
-        raise SplitError(f"could not read {source}: {exc}")
+        raise SplitError(f"could not read {source}: {exc}") from exc
 
 
 def set_aside(path, suffix=PRE_SPLIT_SUFFIX):

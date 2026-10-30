@@ -114,12 +114,13 @@ class CipherV1(Cipher):
     version = 1
 
     def encrypt(self, payload: dict[str, Any]) -> tuple[str, str | None]:
-        encryptor = _Cipher(algorithms.AES(self.key), modes.ECB()).encryptor()
+        # ECB is what the control speaks; the add-on cannot choose the mode.
+        encryptor = _Cipher(algorithms.AES(self.key), modes.ECB()).encryptor()  # nosec B305
         raw = _pad(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
         return base64.b64encode(encryptor.update(raw) + encryptor.finalize()).decode(), None
 
     def decrypt(self, pack: str, tag: str | None = None) -> dict[str, Any]:
-        decryptor = _Cipher(algorithms.AES(self.key), modes.ECB()).decryptor()
+        decryptor = _Cipher(algorithms.AES(self.key), modes.ECB()).decryptor()  # nosec B305
         raw = self._b64decode(pack, "pack")
         return self._to_json(_unpad(decryptor.update(raw) + decryptor.finalize()))
 

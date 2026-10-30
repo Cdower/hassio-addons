@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import json
-import socket
 from typing import Any
 
 import pytest
-
 from acpro_thermostat import device as device_module
 from acpro_thermostat import protocol
 from acpro_thermostat.device import AcProDevice, DeviceError, DeviceInfo
@@ -74,7 +72,7 @@ class FakeControl:
 
     def _command(self, cipher: protocol.Cipher, request: dict[str, Any]) -> bytes:
         accepted = [name for name in request["opt"] if name in self.supported]
-        for name, value in zip(request["opt"], request["p"]):
+        for name, value in zip(request["opt"], request["p"], strict=True):
             if name in self.supported:
                 self.supported[name] = value
         return self._reply(
@@ -305,7 +303,7 @@ def test_transport_request_gives_up_after_retries() -> None:
             self.attempts += 1
 
         def recvfrom(self, _size: int) -> tuple[bytes, tuple[str, int]]:
-            raise socket.timeout("no reply")
+            raise TimeoutError("no reply")
 
         def settimeout(self, _timeout: float) -> None:
             pass

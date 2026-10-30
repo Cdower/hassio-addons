@@ -4,14 +4,12 @@ from __future__ import annotations
 
 import socket
 import threading
-from typing import Iterator
+from collections.abc import Iterator
 
 import pytest
-
 from acpro_thermostat import device as device_module
 from acpro_thermostat.device import Transport
 from acpro_thermostat.entities import EntityMap
-
 from test_device import MAC, FakeControl
 
 
@@ -42,7 +40,7 @@ class ControlServer:
         while not self._stop.is_set():
             try:
                 datagram, sender = self._socket.recvfrom(4096)
-            except socket.timeout:
+            except TimeoutError:
                 continue
             except OSError:
                 return

@@ -6,7 +6,6 @@ import base64
 import json
 
 import pytest
-
 from acpro_thermostat import protocol
 from acpro_thermostat.protocol import ProtocolError
 

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # SPDX-License-Identifier: MIT
 #
 # Every mount init-cwa-paths makes must be allowed by apparmor.txt, or it is

@@ -5,7 +5,6 @@ from __future__ import annotations
 import dataclasses
 
 import pytest
-
 from acpro_thermostat.const import (
     PROP_CURRENT_TEMP,
     PROP_FAN_SPEED,

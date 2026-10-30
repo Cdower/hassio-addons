@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # SPDX-License-Identifier: MIT
 #
 # Reconcile Calibre-Web's reverse-proxy header login with the add-on's
@@ -77,7 +76,7 @@ def create_users(con, emails):
     cur = con.execute("SELECT * FROM settings LIMIT 1")
     settings_row = cur.fetchone()
     settings = (
-        dict(zip([d[0] for d in cur.description], settings_row))
+        dict(zip([d[0] for d in cur.description], settings_row, strict=True))
         if settings_row else {}
     )
 
@@ -132,7 +131,9 @@ def create_users(con, emails):
         placeholders = ", ".join(f":{k}" for k in row)
         try:
             con.execute(
-                f"INSERT INTO user ({columns}) VALUES ({placeholders})", row
+                # Column names come from the fixed dicts above, never from
+                # input; the values are bound as named parameters.
+                f"INSERT INTO user ({columns}) VALUES ({placeholders})", row  # nosec B608
             )
             con.commit()
             log(f"created CWA user '{email}'")

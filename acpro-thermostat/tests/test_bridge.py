@@ -6,7 +6,6 @@ import json
 from typing import Any
 
 import pytest
-
 from acpro_thermostat.bridge import PAYLOAD_OFFLINE, PAYLOAD_ONLINE, Bridge
 from acpro_thermostat.config import MqttSettings
 from acpro_thermostat.device import DeviceError, DeviceInfo

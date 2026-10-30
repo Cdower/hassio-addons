@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # SPDX-License-Identifier: MIT
 #
 # Install user-supplied Calibre-Web metadata providers next to the built-in
@@ -23,6 +22,7 @@
 # Without --source, only the previously installed providers are removed.
 
 import argparse
+import contextlib
 import os
 import re
 import shutil
@@ -44,10 +44,8 @@ def log(msg):
 
 
 def remove(path):
-    try:
+    with contextlib.suppress(FileNotFoundError):
         os.remove(path)
-    except FileNotFoundError:
-        pass
 
 
 def read_manifest(path):

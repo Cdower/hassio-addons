@@ -142,7 +142,8 @@ def _supervisor_mqtt() -> dict[str, Any] | None:
         headers={"Authorization": f"Bearer {token}"},
     )
     try:
-        with urllib.request.urlopen(request, timeout=10) as response:
+        # SUPERVISOR_MQTT_URL is a fixed http:// constant, never user input.
+        with urllib.request.urlopen(request, timeout=10) as response:  # nosec B310
             payload = json.loads(response.read().decode("utf-8"))
     except (urllib.error.URLError, OSError, json.JSONDecodeError) as err:
         _LOGGER.warning("Could not read MQTT service details from the Supervisor: %s", err)

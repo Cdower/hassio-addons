@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # SPDX-License-Identifier: MIT
 #
 # Consistent SQLite copies for Home Assistant add-on backups.
@@ -36,6 +35,7 @@
 # ROOTs default to /data and /addon_config; missing roots are skipped.
 
 import argparse
+import contextlib
 import os
 import sqlite3
 import sys
@@ -86,10 +86,8 @@ def scan(roots):
 
 
 def remove(path):
-    try:
+    with contextlib.suppress(FileNotFoundError):
         os.remove(path)
-    except FileNotFoundError:
-        pass
 
 
 def drop_privileges():

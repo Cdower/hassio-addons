@@ -6,7 +6,6 @@ import threading
 import time
 
 import pytest
-
 from acpro_thermostat import __main__ as main_module
 from acpro_thermostat.config import Options
 from acpro_thermostat.device import DeviceError
