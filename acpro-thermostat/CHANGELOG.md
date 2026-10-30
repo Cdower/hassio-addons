@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- The add-on's Python dependencies (cryptography and paho-mqtt) are now
+  declared in `pyproject.toml` and pinned, hashes included, in `uv.lock`; the
+  image build installs exactly that with [uv](https://docs.astral.sh/uv/)
+  instead of `pip install -r requirements.txt`. The packages CI needs for the
+  test suite live in a separate `test` dependency group that never reaches
+  the image. No change to what the add-on ships or does.
+
 ## 1.0.0
 
 First release.

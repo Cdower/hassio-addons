@@ -128,17 +128,13 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
-        with:
-          # Match the Python shipped by the add-on base images (see the
-          # Dockerfiles); keep in step with target-version in ruff.toml and
-          # the add-ons' .python-version files.
-          python-version: "3.13"
       - name: Set up uv
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2  # v10.3.3
         with:
-          # Keep in step with the uv stage in calibre-web-automated/Dockerfile.
+          # Keep in step with the uv stage in the add-ons' Dockerfiles. uv
+          # also provides the Python the tests run on, from each add-on's
+          # .python-version (match the Python shipped by the add-on base
+          # images, see the Dockerfiles, and target-version in ruff.toml).
           version: "0.13.6"
           enable-cache: true
       - name: Run add-on tests
@@ -152,18 +148,11 @@ jobs:
           for suite in "${suites[@]}"; do
             addon="${suite%/tests}"
             echo "::group::${addon}"
-            if [[ -f "${addon}/pyproject.toml" ]]; then
-              # uv-managed add-on: uv.lock's runtime dependencies plus its
-              # `test` group (pytest and what the base image ships), in the
-              # add-on's own virtual environment.
-              uv run --project "${addon}" --frozen --group test \
-                pytest "${suite}" -v
-            else
-              # pip-managed add-on: the requirements.txt its Dockerfile
-              # installs, plus pytest.
-              pip install pytest -r "${addon}/requirements.txt"
+            # uv.lock's runtime dependencies plus the add-on's `test` group
+            # (pytest and whatever the base image ships that the tests need),
+            # in the add-on's own virtual environment.
+            uv run --project "${addon}" --frozen --group test \
               pytest "${suite}" -v
-            fi
             echo "::endgroup::"
           done
 
