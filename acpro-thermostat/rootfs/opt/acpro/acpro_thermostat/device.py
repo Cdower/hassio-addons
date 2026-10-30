@@ -5,8 +5,8 @@ from __future__ import annotations
 import logging
 import socket
 import time
-from dataclasses import dataclass, field
 from collections.abc import Iterable, Sequence
+from dataclasses import dataclass, field
 from typing import Any
 
 from . import protocol
@@ -51,7 +51,9 @@ class DeviceInfo:
 class Transport:
     """A UDP socket that speaks request/response with one or more controls."""
 
-    def __init__(self, *, timeout: float = 2.0, bind_host: str = "0.0.0.0") -> None:
+    # Discovery broadcasts on every interface so the panel can be found on
+    # whichever network the add-on container is attached to.
+    def __init__(self, *, timeout: float = 2.0, bind_host: str = "0.0.0.0") -> None:  # nosec B104
         self._timeout = timeout
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -80,7 +82,7 @@ class Transport:
             self._socket.settimeout(remaining)
             try:
                 yield self._socket.recvfrom(4096)
-            except socket.timeout:
+            except TimeoutError:
                 return
             finally:
                 self._socket.settimeout(self._timeout)
@@ -99,7 +101,7 @@ class Transport:
                 self._socket.sendto(datagram, address)
                 raw, _sender = self._socket.recvfrom(4096)
                 return protocol.parse_envelope(raw)
-            except (socket.timeout, OSError, ProtocolError) as err:
+            except (TimeoutError, OSError, ProtocolError) as err:
                 last_error = err
                 _LOGGER.debug(
                     "Request to %s:%s failed (attempt %s/%s): %s",
@@ -275,7 +277,7 @@ def _zip_columns(columns: Any, values: Any) -> dict[str, int]:
 
     return {
         name: int(value)
-        for name, value in zip(columns, values)
+        for name, value in zip(columns, values, strict=False)
         if isinstance(name, str) and isinstance(value, (bool, int, float))
     }
 

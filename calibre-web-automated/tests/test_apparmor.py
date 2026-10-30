@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # SPDX-License-Identifier: MIT
 #
 # Every mount init-cwa-paths makes must be allowed by apparmor.txt, or it is
@@ -17,7 +16,12 @@ import unittest
 HERE = os.path.dirname(os.path.abspath(__file__))
 ADDON_ROOT = os.path.dirname(HERE)
 INIT_PATHS = os.path.join(
-    ADDON_ROOT, "rootfs", "etc", "s6-overlay", "scripts", "init-cwa-paths",
+    ADDON_ROOT,
+    "rootfs",
+    "etc",
+    "s6-overlay",
+    "scripts",
+    "init-cwa-paths",
 )
 PROFILE = os.path.join(ADDON_ROOT, "apparmor.txt")
 
@@ -35,12 +39,12 @@ class AppArmorMountRulesTest(unittest.TestCase):
     def rules_for(self, target):
         pattern = re.compile(
             r"^\s*mount\s+(.*?)\s*->\s*" + re.escape(target.rstrip("/") + "/") + r"\s*,",
-            re.M,
+            re.MULTILINE,
         )
         return [m.group(1) for m in pattern.finditer(self.profile)]
 
     def test_bind_targets_are_allowed(self):
-        targets = re.findall(r"^\s*bind_user_path\s+\S+\s+(/\S+)\s*$", self.script, re.M)
+        targets = re.findall(r"^\s*bind_user_path\s+\S+\s+(/\S+)\s*$", self.script, re.MULTILINE)
         self.assertGreaterEqual(len(targets), 4, "parser found too few bind targets")
         for target in targets:
             rules = self.rules_for(target)
@@ -49,7 +53,7 @@ class AppArmorMountRulesTest(unittest.TestCase):
             self.assertIn("options=(rw, move)", rules, f"no move rule for {target}")
 
     def test_smb_mount_point_is_allowed(self):
-        match = re.search(r"^SMB_MOUNT_POINT=(\S+)$", self.script, re.M)
+        match = re.search(r"^SMB_MOUNT_POINT=(\S+)$", self.script, re.MULTILINE)
         self.assertIsNotNone(match)
         self.assertIn("fstype=cifs", self.rules_for(match.group(1)))
 
@@ -64,16 +68,19 @@ class SmbCapabilitiesTest(unittest.TestCase):
         config = read(os.path.join(ADDON_ROOT, "config.yaml"))
         # Items may carry a trailing comment or whitespace.
         block = re.search(
-            r"^privileged:\n((?:[ \t]+-[ \t]*\S+[ \t]*(?:#.*)?\n)+)", config, re.M,
+            r"^privileged:\n((?:[ \t]+-[ \t]*\S+[ \t]*(?:#.*)?\n)+)",
+            config,
+            re.MULTILINE,
         )
         self.assertIsNotNone(block, "no privileged list in config.yaml")
-        caps = re.findall(r"^[ \t]+-[ \t]*([^\s#]+)", block.group(1), re.M)
+        caps = re.findall(r"^[ \t]+-[ \t]*([^\s#]+)", block.group(1), re.MULTILINE)
         self.assertIn("SYS_ADMIN", caps)
         self.assertIn("DAC_READ_SEARCH", caps)
 
     def test_dac_read_search_use_is_denied(self):
         self.assertRegex(
-            read(PROFILE), r"(?m)^\s*deny\s+capability\s+dac_read_search\s*,",
+            read(PROFILE),
+            r"(?m)^\s*deny\s+capability\s+dac_read_search\s*,",
         )
 
 

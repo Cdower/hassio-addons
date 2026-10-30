@@ -38,7 +38,7 @@ concurrency:
 jobs:
   release:
     name: Tag & release ${{ inputs.addon }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04-arm
     permissions:
       contents: write
     outputs:
@@ -48,7 +48,7 @@ jobs:
       tag: ${{ steps.resolve.outputs.tag }}
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -190,10 +190,16 @@ jobs:
     name: Publish images
     needs: release
     if: ${{ !inputs.dry_run }}
+    # A called workflow gets no more than its caller grants, so these must
+    # cover everything deploy.yaml's jobs ask for, attestation included.
     permissions:
       contents: read
       packages: write
-    uses: ./.github/workflows/deploy.yaml
+      id-token: write
+      attestations: write
+    # actionlint does not accept the `$/` self-repository syntax zizmor asks for
+    # yet, so keep the workspace-relative form until it does.
+    uses: ./.github/workflows/deploy.yaml  # zizmor: ignore[self-repository]
     with:
       addon: ${{ needs.release.outputs.addon }}
       version: ${{ needs.release.outputs.version }}

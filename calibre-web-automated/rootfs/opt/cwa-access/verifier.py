@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # SPDX-License-Identifier: MIT
 #
 # Cloudflare Access JWT verifier for the Calibre-Web Automated add-on.

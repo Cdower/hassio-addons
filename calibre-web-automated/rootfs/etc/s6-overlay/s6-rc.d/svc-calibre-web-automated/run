@@ -2,7 +2,7 @@
 # shellcheck shell=bash
 # ==============================================================================
 # ADD-ON OVERRIDE of upstream svc-calibre-web-automated/run (base image
-# calibre-web-nextgen v4.1.48). Only change: optional `-i $CWA_BIND_ADDRESS` so
+# calibre-web-nextgen v4.1.58). Only change: optional `-i $CWA_BIND_ADDRESS` so
 # Cloudflare Access mode can pin CWA to loopback (header-spoofing protection).
 # RE-DIFF against the upstream file on every base-image bump — see
 # .claude/skills/update-base-image.

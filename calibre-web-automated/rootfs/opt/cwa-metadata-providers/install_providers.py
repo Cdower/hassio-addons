@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # SPDX-License-Identifier: MIT
 #
 # Install user-supplied Calibre-Web metadata providers next to the built-in
@@ -23,6 +22,7 @@
 # Without --source, only the previously installed providers are removed.
 
 import argparse
+import contextlib
 import os
 import re
 import shutil
@@ -44,10 +44,8 @@ def log(msg):
 
 
 def remove(path):
-    try:
+    with contextlib.suppress(FileNotFoundError):
         os.remove(path)
-    except FileNotFoundError:
-        pass
 
 
 def read_manifest(path):
@@ -61,8 +59,7 @@ def read_manifest(path):
 def write_manifest(path, names):
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     with open(path, "w", encoding="utf-8") as fh:
-        for name in sorted(names):
-            fh.write(f"{name}\n")
+        fh.writelines(f"{name}\n" for name in sorted(names))
 
 
 def remove_previous(dest, manifest_names):
@@ -124,8 +121,10 @@ def install(source, dest, manifest):
             log(f"skipping {name}: not a valid Python module name")
             continue
         if name[:-3] in taken:
-            log(f"skipping {name}: a built-in provider with that name "
-                "already exists and is never overwritten — rename the file")
+            log(
+                f"skipping {name}: a built-in provider with that name "
+                "already exists and is never overwritten — rename the file"
+            )
             continue
         try:
             copy_into(path, dest, name)
@@ -154,8 +153,7 @@ def main(argv=None):
     if args.source is None:
         return 0
     if installed:
-        log(f"installed {len(installed)} custom provider(s): "
-            + ", ".join(installed))
+        log(f"installed {len(installed)} custom provider(s): " + ", ".join(installed))
     else:
         log(f"no custom providers found in {args.source}")
     return 0

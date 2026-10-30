@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # SPDX-License-Identifier: MIT
 #
 # Offline tests for the `books_path` split library helper
@@ -18,7 +17,11 @@ import unittest
 HERE = os.path.dirname(os.path.abspath(__file__))
 ADDON_ROOT = os.path.dirname(HERE)
 SPLIT_PATH = os.path.join(
-    ADDON_ROOT, "rootfs", "opt", "cwa-split-library", "split_library.py",
+    ADDON_ROOT,
+    "rootfs",
+    "opt",
+    "cwa-split-library",
+    "split_library.py",
 )
 
 spec = importlib.util.spec_from_file_location("cwa_split_library", SPLIT_PATH)
@@ -69,10 +72,8 @@ class PrepareTest(unittest.TestCase):
         self.assertEqual(titles(self.local), ["Dune", "Emma"])
         self.assertFalse(os.path.exists(self.shared))
         self.assertEqual(titles(self.shared + ".pre-split"), ["Dune", "Emma"])
-        self.assertEqual(split_library.read_state(self.state),
-                         (self.library, self.books))
-        self.assertFalse(os.path.exists(
-            os.path.join(self.library, split_library.STAGING_NAME)))
+        self.assertEqual(split_library.read_state(self.state), (self.library, self.books))
+        self.assertFalse(os.path.exists(os.path.join(self.library, split_library.STAGING_NAME)))
 
     def test_import_carries_uncheckpointed_wal(self):
         writer = make_library(self.shared, ["Dune"], wal=True)
@@ -143,14 +144,13 @@ class PrepareTest(unittest.TestCase):
         self.prepare()
         with self.quiet:
             self.assertEqual(
-                split_library.prepare(self.library, self.books + "/", self.state),
-                "unchanged")
+                split_library.prepare(self.library, self.books + "/", self.state), "unchanged"
+            )
 
     def test_nothing_anywhere_starts_new_library(self):
         self.assertEqual(self.prepare(), "new")
         self.assertFalse(os.path.exists(self.local))
-        self.assertEqual(split_library.read_state(self.state),
-                         (self.library, self.books))
+        self.assertEqual(split_library.read_state(self.state), (self.library, self.books))
 
     def test_warns_about_book_folders_without_a_database(self):
         os.makedirs(os.path.join(self.books, "Frank Herbert", "Dune (1)"))
@@ -190,8 +190,9 @@ class PrepareTest(unittest.TestCase):
         self.local = os.path.join(self.library, "metadata.db")
         make_library(self.local, ["Dune"]).close()
         self.assertEqual(self.prepare(), "kept-local")
-        self.assertEqual(sorted(os.listdir(os.path.dirname(self.library))),
-                         ["calibre-library", "lib #1 ?x %41"])
+        self.assertEqual(
+            sorted(os.listdir(os.path.dirname(self.library))), ["calibre-library", "lib #1 ?x %41"]
+        )
 
     def move_library(self):
         """Point library_path at a new, empty folder, keeping books_path."""
@@ -217,8 +218,7 @@ class PrepareTest(unittest.TestCase):
         self.assertEqual(titles(self.old_local + ".moved"), ["Dune", "Emma"])
         # The export copy is left for the exporter to replace.
         self.assertEqual(titles(self.shared), [])
-        self.assertEqual(split_library.read_state(self.state),
-                         (self.library, self.books))
+        self.assertEqual(split_library.read_state(self.state), (self.library, self.books))
 
     def test_library_path_change_restores_export_when_old_folder_is_gone(self):
         make_library(self.shared, ["Dune"]).close()
@@ -248,8 +248,7 @@ class PrepareTest(unittest.TestCase):
             self.prepare()
         self.assertEqual(titles(self.old_local), ["Dune"])
         self.assertEqual(titles(self.local), ["Emma"])
-        self.assertEqual(split_library.read_state(self.state),
-                         (self.old_library, self.books))
+        self.assertEqual(split_library.read_state(self.state), (self.old_library, self.books))
 
     def test_library_path_change_with_no_database_anywhere_warns(self):
         make_library(self.shared, ["Dune"]).close()
@@ -271,10 +270,20 @@ class PrepareTest(unittest.TestCase):
         with open(self.shared, "wb") as fh:
             fh.write(b"SQLite format 3\x00" + b"\x01" * 4000)
         with self.quiet:
-            self.assertEqual(split_library.main([
-                "prepare", "--library", self.library, "--books", self.books,
-                "--state", self.state,
-            ]), 1)
+            self.assertEqual(
+                split_library.main(
+                    [
+                        "prepare",
+                        "--library",
+                        self.library,
+                        "--books",
+                        self.books,
+                        "--state",
+                        self.state,
+                    ]
+                ),
+                1,
+            )
         self.assertIn("ERROR", self.out.getvalue())
 
 
@@ -289,8 +298,7 @@ class SettingsTest(unittest.TestCase):
             "config_calibre_dir TEXT, config_calibre_split BOOLEAN, "
             "config_calibre_split_dir TEXT, config_calibre_server_enabled BOOLEAN)"
         )
-        con.execute(
-            "INSERT INTO settings VALUES (1, '/calibre-library', 0, NULL, 0)")
+        con.execute("INSERT INTO settings VALUES (1, '/calibre-library', 0, NULL, 0)")
         con.commit()
         con.close()
         self.out = io.StringIO()
@@ -305,7 +313,8 @@ class SettingsTest(unittest.TestCase):
         try:
             return con.execute(
                 "SELECT config_calibre_split, config_calibre_split_dir, "
-                "config_calibre_dir FROM settings").fetchone()
+                "config_calibre_dir FROM settings"
+            ).fetchone()
         finally:
             con.close()
 

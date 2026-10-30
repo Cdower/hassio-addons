@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # Calibre-Web Automated metadata provider for arXiv.org
 #
 # Based on the arXiv plugin for Calibre from the "metadata-sources" project:
@@ -31,16 +30,17 @@
 #
 # arXiv API docs: https://info.arxiv.org/help/api/user-manual.html
 
+# The CWA image sets the Python version, so keep annotations lazy.
+from __future__ import annotations
+
 import re
 from datetime import datetime
-from typing import List, Optional
 from urllib.parse import quote
 from xml.etree import ElementTree as ET
 
 import requests
-
 from cps import logger
-from cps.services.Metadata import MetaRecord, MetaSourceInfo, Metadata
+from cps.services.Metadata import Metadata, MetaRecord, MetaSourceInfo
 
 log = logger.create()
 
@@ -73,7 +73,7 @@ class Arxiv(Metadata):
 
     def search(
         self, query: str, generic_cover: str = "", locale: str = "en"
-    ) -> Optional[List[MetaRecord]]:
+    ) -> list[MetaRecord] | None:
         if not self.active:
             return []
         query = (query or "").strip()
@@ -105,7 +105,10 @@ class Arxiv(Metadata):
             return []
 
         try:
-            root = ET.fromstring(resp.content)
+            # defusedxml is not in the CWA image. The stdlib parser does not
+            # resolve external entities, and expat >= 2.4 (Python 3.13 ships
+            # newer) caps entity expansion, so an Atom feed is safe to parse.
+            root = ET.fromstring(resp.content)  # nosec B314
         except ET.ParseError as e:
             log.warning("arXiv response parse failed: %s", e)
             return []
@@ -117,7 +120,7 @@ class Arxiv(Metadata):
                 results.append(mr)
         return results
 
-    def _parse_entry(self, entry, generic_cover: str) -> Optional[MetaRecord]:
+    def _parse_entry(self, entry, generic_cover: str) -> MetaRecord | None:
         title_el = entry.find("atom:title", self.NS)
         id_el = entry.find("atom:id", self.NS)
         if title_el is None or id_el is None:
@@ -182,7 +185,7 @@ class Arxiv(Metadata):
         except ValueError:
             return ""
 
-    def _parse_categories(self, entry) -> List[str]:
+    def _parse_categories(self, entry) -> list[str]:
         cats = []
         for cat in entry.findall("atom:category", self.NS):
             term = cat.get("term")

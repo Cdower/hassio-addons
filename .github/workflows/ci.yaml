@@ -19,7 +19,6 @@ permissions:
   contents: read
   packages: read
   pull-requests: read
-  security-events: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -28,13 +27,13 @@ concurrency:
 jobs:
   discover:
     name: Discover add-ons
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04-arm
     outputs:
       addons: ${{ steps.discover.outputs.addons }}
       builds: ${{ steps.discover.outputs.builds }}
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
       - name: List add-ons and their architectures
@@ -85,14 +84,14 @@ jobs:
   lint-app:
     name: Lint App (${{ matrix.addon }})
     needs: discover
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04-arm
     strategy:
       fail-fast: false
       matrix:
         addon: ${{ fromJson(needs.discover.outputs.addons) }}
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
       - name: Run Add-on Lint
@@ -101,77 +100,39 @@ jobs:
           community: false
           path: "./${{ matrix.addon }}"
 
-  lint-hadolint:
-    name: Hadolint (${{ matrix.addon }})
-    needs: discover
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        addon: ${{ fromJson(needs.discover.outputs.addons) }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
-        with:
-          persist-credentials: false
-      - name: Run Hadolint
-        uses: brpaz/hadolint-action@c27bd9edc1e95eed30474db8f295ff5807ebca14  # v1.5.0
-        with:
-          dockerfile: "./${{ matrix.addon }}/Dockerfile"
-
-  lint-json:
-    name: JSON Lint
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
-        with:
-          persist-credentials: false
-      - name: Run jq
-        run: |
-          shopt -s globstar nullglob
-          for file in **/*.json; do
-            if ! jq '.' "$file" > /dev/null 2>&1; then
-              echo "::error file=${file}::Invalid JSON in ${file}"
-              jq '.' "$file"
-              exit 1
-            fi
-          done
-
   lint-prek:
     name: Prek
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04-arm
     steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - name: Checkout (full history, for the secret scan)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
       - name: Run prek hooks
-        uses: j178/prek-action@6ad80277337ad479fe43bd70701c3f7f8aa74db3  # v2.0.3
-
-  lint-yamllint:
-    name: YAMLLint
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
-        with:
-          persist-credentials: false
-      - name: Run YAMLLint
-        uses: frenck/action-yamllint@34b4bbcaeabedcfefad6adea8c5bbc42af0e2d47  # v1.5
+        uses: j178/prek-action@44924fe9ef4a6f88253c4b6b1bf11c689d3ce53d  # v3.1.0
+        env:
+          # Lets zizmor run its online audits (known-vulnerable and stale
+          # action pins); without a token it falls back to offline mode.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # The pre-commit gitleaks hook only sees the staged diff; this scans
+      # every commit (see gitleaks-history in prek.toml).
+      - name: Scan the full git history for secrets
+        run: prek run --hook-stage manual gitleaks-history
 
   test-app:
     name: Test App
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04-arm
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
       - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
         with:
-          # Match the Python shipped by the add-on base images (see Dockerfiles).
+          # Match the Python shipped by the add-on base images (see the
+          # Dockerfiles); keep in step with target-version in ruff.toml.
           python-version: "3.13"
       - name: Install test dependencies
         run: |
@@ -195,19 +156,16 @@ jobs:
     needs:
       - discover
       - lint-app
-      - lint-hadolint
-      - lint-json
       - lint-prek
-      - lint-yamllint
       - test-app
-    runs-on: ${{ matrix.architecture == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.architecture == 'aarch64' && 'ubuntu-26.04-arm' || 'ubuntu-26.04' }}
     strategy:
       fail-fast: false
       matrix:
         include: ${{ fromJson(needs.discover.outputs.builds) }}
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
       - name: Read addon information
@@ -262,16 +220,13 @@ jobs:
     needs:
       - discover
       - lint-app
-      - lint-hadolint
-      - lint-json
       - lint-prek
-      - lint-yamllint
       - test-app
       - build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04-arm
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
       - name: Check that this job gates every other job

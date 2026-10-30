@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import socket
 from typing import Any
 
 import pytest
@@ -74,7 +73,7 @@ class FakeControl:
 
     def _command(self, cipher: protocol.Cipher, request: dict[str, Any]) -> bytes:
         accepted = [name for name in request["opt"] if name in self.supported]
-        for name, value in zip(request["opt"], request["p"]):
+        for name, value in zip(request["opt"], request["p"], strict=True):
             if name in self.supported:
                 self.supported[name] = value
         return self._reply(
@@ -212,9 +211,7 @@ def test_probe_keeps_only_the_columns_the_control_answers(control: FakeControl) 
 
 def test_probe_works_when_the_control_answers_partially() -> None:
     """Firmware that ignores unknown columns instead of dropping the request."""
-    control = FakeControl(
-        supported={"Pow": 1, "Mod": 1, "SetTem": 22, "TemSen": 61}, strict=False
-    )
+    control = FakeControl(supported={"Pow": 1, "Mod": 1, "SetTem": 22, "TemSen": 61}, strict=False)
     device = _bound(control)
 
     assert device.probe() == ["Pow", "Mod", "SetTem", "TemSen"]
@@ -272,9 +269,7 @@ def test_refresh_with_no_probed_columns_stays_quiet(control: FakeControl) -> Non
 
 
 def test_zip_columns_drops_values_that_are_not_numbers() -> None:
-    paired = device_module._zip_columns(
-        ["Pow", "Mod", "SetTem", "Bogus"], [1, None, 22.0, "nope"]
-    )
+    paired = device_module._zip_columns(["Pow", "Mod", "SetTem", "Bogus"], [1, None, 22.0, "nope"])
 
     assert paired == {"Pow": 1, "SetTem": 22}
 
@@ -305,7 +300,7 @@ def test_transport_request_gives_up_after_retries() -> None:
             self.attempts += 1
 
         def recvfrom(self, _size: int) -> tuple[bytes, tuple[str, int]]:
-            raise socket.timeout("no reply")
+            raise TimeoutError("no reply")
 
         def settimeout(self, _timeout: float) -> None:
             pass

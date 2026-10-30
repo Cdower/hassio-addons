@@ -13,6 +13,7 @@ Ed25519 checks run through the openssl CLI, so this needs only the standard
 library and nothing installed from a package index. Exits non-zero on the
 first failure. Used by .github/workflows/tailscale.yaml.
 """
+
 import base64
 import glob
 import hashlib
@@ -34,7 +35,7 @@ def parse_keys(text, label, source):
         if line.strip() != f"-----BEGIN {label}-----":
             continue
         body = []
-        for following in lines[i + 1:]:
+        for following in lines[i + 1 :]:
             if following.strip() == f"-----END {label}-----":
                 break
             body.append(following.strip())
@@ -64,8 +65,21 @@ def verify_any(keys, message, signature, workdir):
         with open(key_path, "wb") as handle:
             handle.write(ED25519_SPKI_PREFIX + key)
         result = subprocess.run(
-            ["openssl", "pkeyutl", "-verify", "-pubin", "-inkey", key_path,
-             "-keyform", "DER", "-rawin", "-in", msg_path, "-sigfile", sig_path],
+            [
+                "openssl",
+                "pkeyutl",
+                "-verify",
+                "-pubin",
+                "-inkey",
+                key_path,
+                "-keyform",
+                "DER",
+                "-rawin",
+                "-in",
+                msg_path,
+                "-sigfile",
+                sig_path,
+            ],
             capture_output=True,
             check=False,
         )
@@ -93,20 +107,26 @@ def main():
     with tempfile.TemporaryDirectory() as workdir:
         bundle = read(signing_keys)
         if not verify_any(roots, bundle, read(signing_keys + ".sig"), workdir):
-            sys.exit(f"::error::{signing_keys} does not validate with any root"
-                     f" key in {roots_dir}. Either the download was tampered"
-                     " with or Tailscale rotated its root keys; see"
-                     " .github/tailscale/README.md.")
+            sys.exit(
+                f"::error::{signing_keys} does not validate with any root"
+                f" key in {roots_dir}. Either the download was tampered"
+                " with or Tailscale rotated its root keys; see"
+                " .github/tailscale/README.md."
+            )
         signing = parse_keys(bundle.decode(), "SIGNING PUBLIC KEY", signing_keys)
-        print(f"{os.path.basename(signing_keys)}: {len(signing)} signing"
-              " key(s), signed by a committed root key")
+        print(
+            f"{os.path.basename(signing_keys)}: {len(signing)} signing"
+            " key(s), signed by a committed root key"
+        )
 
         for package in packages:
             data = read(package)
             message = hashlib.blake2s(data).digest() + struct.pack("<Q", len(data))
             if not verify_any(signing, message, read(package + ".sig"), workdir):
-                sys.exit(f"::error::{os.path.basename(package)} is not signed"
-                         " by a current Tailscale signing key")
+                sys.exit(
+                    f"::error::{os.path.basename(package)} is not signed"
+                    " by a current Tailscale signing key"
+                )
             print(f"{os.path.basename(package)}: signature OK")
 
 

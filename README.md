@@ -19,6 +19,19 @@ https://github.com/Cdower/hassio-addons
 | **AC Pro Thermostat**     | Local control of the AC Pro X/XB-Series smart communicating touchscreen control | [README](acpro-thermostat/README.md) · [DOCS](acpro-thermostat/DOCS.md)           |
 | **Calibre-Web Automated** | Self-hosted ebook library with automatic ingest, conversion, and metadata       | [README](calibre-web-automated/README.md) · [DOCS](calibre-web-automated/DOCS.md) |
 
+## Contributing
+
+Install the git hooks once per clone so secrets and lint problems are caught
+before they are committed or pushed:
+
+```bash
+prek install
+```
+
+[prek](https://prek.j178.dev) runs the hooks in `prek.toml` (secret scanning,
+linters, formatters); CI runs them too, so nothing depends on the hooks being
+installed.
+
 ## Releasing
 
 Each add-on is versioned and released on its own, tagged `<slug>-v<version>`.
