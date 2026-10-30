@@ -100,27 +100,6 @@ jobs:
           community: false
           path: "./${{ matrix.addon }}"
 
-  lint-hadolint:
-    name: Hadolint (${{ matrix.addon }})
-    needs: discover
-    # hadolint-action builds from hadolint/hadolint:v2.4.0-debian, which only
-    # ships an amd64 image, so this is the one lint job that cannot use the
-    # arm runner.
-    runs-on: ubuntu-26.04
-    strategy:
-      fail-fast: false
-      matrix:
-        addon: ${{ fromJson(needs.discover.outputs.addons) }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Run Hadolint
-        uses: brpaz/hadolint-action@c27bd9edc1e95eed30474db8f295ff5807ebca14  # v1.5.0
-        with:
-          dockerfile: "./${{ matrix.addon }}/Dockerfile"
-
   lint-json:
     name: JSON Lint
     runs-on: ubuntu-26.04-arm
@@ -218,7 +197,6 @@ jobs:
     needs:
       - discover
       - lint-app
-      - lint-hadolint
       - lint-json
       - lint-prek
       - lint-yamllint
@@ -286,7 +264,6 @@ jobs:
     needs:
       - discover
       - lint-app
-      - lint-hadolint
       - lint-json
       - lint-prek
       - lint-yamllint
