@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+### Changed
+
 - The add-on's Python dependencies (cryptography and paho-mqtt) are now
   declared in `pyproject.toml` and pinned, hashes included, in `uv.lock`; the
   image build installs exactly that with [uv](https://docs.astral.sh/uv/)

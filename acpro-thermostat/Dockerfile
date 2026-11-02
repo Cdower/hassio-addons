@@ -36,7 +36,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # The base image points uv (UV_EXTRA_INDEX_URL) at Home Assistant's musllinux
 # wheel index, which uv would search ahead of PyPI. uv.lock was resolved
 # against PyPI and carries PyPI's hashes, so the install drops that index and
-# fetches exactly the locked wheels.
+# fetches exactly the locked wheels. Even with --no-cache uv creates its cache
+# directory skeleton, so that goes too.
 COPY pyproject.toml uv.lock /tmp/acpro-addon/
 RUN --mount=type=bind,from=uv,source=/uv,target=/usr/local/bin/uv \
     unset UV_EXTRA_INDEX_URL \
@@ -44,7 +45,7 @@ RUN --mount=type=bind,from=uv,source=/uv,target=/usr/local/bin/uv \
         --no-emit-project --output-file /tmp/acpro-addon/requirements.txt \
     && uv pip install --system --no-cache --require-hashes --only-binary :all: \
         --requirements /tmp/acpro-addon/requirements.txt \
-    && rm -rf /tmp/acpro-addon /tmp/uv-*.lock
+    && rm -rf /tmp/acpro-addon /tmp/uv-*.lock /root/.cache/uv
 
 COPY rootfs /
 
