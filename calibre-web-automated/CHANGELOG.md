@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Updated the bundled Tailscale client from 1.104.2 to 1.104.4.
 - The add-on's own Python dependency (PyJWT, for Cloudflare Access mode) is now declared in `pyproject.toml` and pinned, hashes included, in `uv.lock`; the image build installs exactly that with [uv](https://docs.astral.sh/uv/) instead of a loose `pip install`. The packages CI needs for the test suite live in a separate `test` dependency group that never reaches the image. No change to what the add-on ships or does.
 
 ## [4.1.58.0] - 2026-10-30
