@@ -135,11 +135,31 @@ jobs:
           # Dockerfiles); keep in step with target-version in ruff.toml and
           # the add-ons' .python-version files.
           python-version: "3.13"
+      - name: Read the uv version the images build with
+        id: uv
+        # The add-on Dockerfiles pin uv in a `FROM ghcr.io/astral-sh/uv:<tag>@sha256:... AS uv`
+        # stage that Dependabot keeps current; the tests run on that same uv
+        # rather than on a second pin kept here by hand.
+        run: |
+          shopt -s nullglob
+          versions=$(
+            sed -n 's|^FROM ghcr.io/astral-sh/uv:\([^@ ]*\)@sha256:[0-9a-f]* *AS uv$|\1|p' \
+              ./*/Dockerfile | sort -u
+          )
+          if [[ -z "${versions}" ]]; then
+            echo "::error::No add-on Dockerfile pins a ghcr.io/astral-sh/uv stage"
+            exit 1
+          fi
+          if [[ $(wc -l <<< "${versions}") -ne 1 ]]; then
+            echo "::error::The add-on Dockerfiles pin different uv versions:" \
+                 "$(tr '\n' ' ' <<< "${versions}")"
+            exit 1
+          fi
+          echo "version=${versions}" >> "$GITHUB_OUTPUT"
       - name: Set up uv
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2  # v10.3.3
         with:
-          # Keep in step with the uv stage in calibre-web-automated/Dockerfile.
-          version: "0.13.6"
+          version: ${{ steps.uv.outputs.version }}
           enable-cache: true
       - name: Run add-on tests
         run: |
@@ -155,13 +175,17 @@ jobs:
             if [[ -f "${addon}/pyproject.toml" ]]; then
               # uv-managed add-on: uv.lock's runtime dependencies plus its
               # `test` group (pytest and what the base image ships), in the
-              # add-on's own virtual environment.
-              uv run --project "${addon}" --frozen --group test \
+              # add-on's own virtual environment. --locked fails if uv.lock
+              # has fallen behind pyproject.toml.
+              uv run --project "${addon}" --locked --group test \
                 pytest "${suite}" -v
             else
-              # pip-managed add-on: the requirements.txt its Dockerfile
-              # installs, plus pytest.
-              pip install pytest -r "${addon}/requirements.txt"
+              # pip-managed add-on: pytest plus the requirements.txt its
+              # Dockerfile installs, when it has one.
+              pip install pytest
+              if [[ -f "${addon}/requirements.txt" ]]; then
+                pip install -r "${addon}/requirements.txt"
+              fi
               pytest "${suite}" -v
             fi
             echo "::endgroup::"

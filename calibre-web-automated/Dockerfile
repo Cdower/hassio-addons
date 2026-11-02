@@ -84,15 +84,17 @@ RUN \
 # uv.lock pins it, so `uv export` of the lock is a hash-pinned requirements
 # file that uv installs into the base image's /lsiopy venv, whose
 # `cryptography` (upstream pyproject.toml) provides the RS256 backend.
-# `--no-default-groups` leaves out the `test` dependency group (pytest and
-# the cryptography/werkzeug pins CI needs), which never reaches the image.
+# `--locked` fails the build if uv.lock no longer matches pyproject.toml, so
+# an edit made without `uv lock` cannot ship the old pin. `--no-default-groups`
+# leaves out the `test` dependency group (pytest and the cryptography/werkzeug
+# pins CI needs), which never reaches the image.
 COPY pyproject.toml uv.lock /tmp/cwa-addon/
 # hadolint ignore=DL3008
 RUN --mount=type=bind,from=uv,source=/uv,target=/usr/local/bin/uv \
     apt-get update \
     && apt-get install -y --no-install-recommends nginx \
     && rm -rf /var/lib/apt/lists/* /etc/nginx/sites-enabled/default \
-    && uv export --project /tmp/cwa-addon --frozen --no-default-groups \
+    && uv export --project /tmp/cwa-addon --locked --no-default-groups \
         --no-emit-project --output-file /tmp/cwa-addon/requirements.txt \
     && uv pip install --python /lsiopy/bin/python3 --no-cache \
         --require-hashes --requirements /tmp/cwa-addon/requirements.txt \

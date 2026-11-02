@@ -122,7 +122,7 @@ corresponding add-on code/tests must be updated:
 
 ```bash
 prek run --all-files
-uv run --project calibre-web-automated --frozen --group test pytest calibre-web-automated/tests/ -v
+uv run --project calibre-web-automated --locked --group test pytest calibre-web-automated/tests/ -v
 docker build --build-arg BUILD_ARCH=amd64 calibre-web-automated/
 apparmor_parser -Q -K -S -M /etc/apparmor.d/abi/4.0 calibre-web-automated/apparmor.txt > /dev/null
 ```
