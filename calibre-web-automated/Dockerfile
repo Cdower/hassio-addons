@@ -84,15 +84,17 @@ RUN \
 # uv.lock pins it, so `uv export` of the lock is a hash-pinned requirements
 # file that uv installs into the base image's /lsiopy venv, whose
 # `cryptography` (upstream pyproject.toml) provides the RS256 backend.
-# `--no-default-groups` leaves out the `test` dependency group (pytest and
-# the cryptography/werkzeug pins CI needs), which never reaches the image.
+# `--locked` fails the build if uv.lock no longer matches pyproject.toml, so
+# an edit made without `uv lock` cannot ship the old pin. `--no-default-groups`
+# leaves out the `test` dependency group (pytest and the cryptography/werkzeug
+# pins CI needs), which never reaches the image.
 COPY pyproject.toml uv.lock /tmp/cwa-addon/
 # hadolint ignore=DL3008
 RUN --mount=type=bind,from=uv,source=/uv,target=/usr/local/bin/uv \
     apt-get update \
     && apt-get install -y --no-install-recommends nginx \
     && rm -rf /var/lib/apt/lists/* /etc/nginx/sites-enabled/default \
-    && uv export --project /tmp/cwa-addon --frozen --no-default-groups \
+    && uv export --project /tmp/cwa-addon --locked --no-default-groups \
         --no-emit-project --output-file /tmp/cwa-addon/requirements.txt \
     && uv pip install --python /lsiopy/bin/python3 --no-cache \
         --require-hashes --requirements /tmp/cwa-addon/requirements.txt \
@@ -114,9 +116,9 @@ RUN \
 # to the tailnet. Tarball is fetched over HTTPS from the official publisher
 # and verified against per-arch sha256 pinned below; bump TAILSCALE_VERSION
 # and both hashes together when upgrading.
-ARG TAILSCALE_VERSION="1.104.2"
-ARG TAILSCALE_SHA256_AMD64="512f613ed7d04fc7282f7dc5bd76aa105aae28168fbb9357eb749ebcbc29f0ae"
-ARG TAILSCALE_SHA256_ARM64="5776aaa901b5ef1916e66be5bb54b9f481cd399c9c28db123a8cab620efa237b"
+ARG TAILSCALE_VERSION="1.104.4"
+ARG TAILSCALE_SHA256_AMD64="624ea093d47d62cf56f17b8332d74b8decda4a1faa610ebc60a1de334b2b3dc9"
+ARG TAILSCALE_SHA256_ARM64="a1c249ce6bdebef62e1ae3b997595555bce2ae4709bf95a718e9ca7a129dad7e"
 RUN \
     case "${BUILD_ARCH}" in \
         amd64) TS_ARCH=amd64; TS_SHA256="${TAILSCALE_SHA256_AMD64}" ;; \

@@ -35,6 +35,13 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
+    ignore:
+      # The `test` group pins these to the versions the base image's /lsiopy
+      # ships, so the tests see what the add-on's scripts see. They move with
+      # the base image (see .claude/skills/update-base-image/SKILL.md), not
+      # on their own.
+      - dependency-name: cryptography
+      - dependency-name: werkzeug
 
   - package-ecosystem: uv
     directory: /acpro-thermostat

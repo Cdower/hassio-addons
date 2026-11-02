@@ -26,8 +26,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # pyproject.toml declares the add-on's dependencies and uv.lock pins them, so
 # `uv export` of the lock is a hash-pinned requirements file that uv installs
-# into the base image's system Python. `--no-default-groups` leaves out the
-# `test` dependency group (pytest), which never reaches the image.
+# into the base image's system Python. `--locked` fails the build if uv.lock
+# no longer matches pyproject.toml, so an edit made without `uv lock` cannot
+# ship the old pin. `--no-default-groups` leaves out the `test` dependency
+# group (pytest), which never reaches the image.
 #
 # cryptography and paho-mqtt both publish musllinux wheels for amd64 and
 # aarch64, so `--only-binary :all:` holds and no compiler toolchain is needed
@@ -41,7 +43,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 COPY pyproject.toml uv.lock /tmp/acpro-addon/
 RUN --mount=type=bind,from=uv,source=/uv,target=/usr/local/bin/uv \
     unset UV_EXTRA_INDEX_URL \
-    && uv export --project /tmp/acpro-addon --frozen --no-default-groups \
+    && uv export --project /tmp/acpro-addon --locked --no-default-groups \
         --no-emit-project --output-file /tmp/acpro-addon/requirements.txt \
     && uv pip install --system --no-cache --require-hashes --only-binary :all: \
         --requirements /tmp/acpro-addon/requirements.txt \
