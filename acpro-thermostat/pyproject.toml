@@ -1,0 +1,33 @@
+# Python dependencies of the acpro-thermostat add-on, managed with uv
+# (https://docs.astral.sh/uv/). uv.lock pins every package and its hashes;
+# refresh it with `uv lock` after editing this file.
+#
+# `dependencies` is what the Dockerfile installs into the base image's system
+# Python, so a rebuild of an old add-on version produces the same image. Keep
+# it to what the package under rootfs/opt/acpro imports and the image lacks.
+#
+# The `test` dependency group is for CI and local test runs only
+# (`uv run --group test pytest tests`); the Dockerfile leaves it out.
+#
+# This is not a package: `tool.uv.package = false` keeps uv from building or
+# installing the add-on itself. The add-on's version lives in config.yaml.
+[project]
+name = "acpro-thermostat-addon"
+version = "0.0.0"
+description = "Home Assistant add-on for the AC Pro X/XB-Series smart thermostat"
+requires-python = ">=3.13"
+dependencies = [
+  # AES-128-ECB / AES-128-GCM for the panel's two encryption schemes
+  # (rootfs/opt/acpro/acpro_thermostat/protocol.py).
+  "cryptography==50.0.0",
+  # MQTT discovery and state publishing (rootfs/opt/acpro/acpro_thermostat/bridge.py).
+  "paho-mqtt==2.1.0",
+]
+
+[dependency-groups]
+test = [
+  "pytest==9.2.0",
+]
+
+[tool.uv]
+package = false
