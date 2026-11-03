@@ -19,7 +19,7 @@ requires-python = ">=3.13"
 dependencies = [
   # AES-128-ECB / AES-128-GCM for the panel's two encryption schemes
   # (rootfs/opt/acpro/acpro_thermostat/protocol.py).
-  "cryptography==50.0.0",
+  "cryptography==50.0.2",
   # MQTT discovery and state publishing (rootfs/opt/acpro/acpro_thermostat/bridge.py).
   "paho-mqtt==2.1.0",
 ]
