@@ -1,0 +1,29 @@
+{
+  "id": "TEST_ANDROID_cloudIoTDevicesGetSensorMap",
+  "sensorMap": [
+    {
+      "isEntireBed": false,
+      "self": false,
+      "sensorID": 400000,
+      "sensorName": null,
+      "sensorStatus": 0,
+      "unitNumber": 0,
+      "userFirstName": "",
+      "userID": 300000
+    },
+    {
+      "isEntireBed": false,
+      "self": true,
+      "sensorID": 400001,
+      "sensorName": null,
+      "sensorStatus": 0,
+      "unitNumber": 1,
+      "userFirstName": "",
+      "userID": 300001
+    }
+  ],
+  "sleeptrackerID": 200002,
+  "sleeptrackerProcessorID": 100001,
+  "statusCode": 0,
+  "statusMessage": ""
+}

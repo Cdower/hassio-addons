@@ -1,0 +1,99 @@
+{
+  "body": {
+    "connectionStatus": "online",
+    "invariants": [
+      {
+        "firmwareVersion": 3000021,
+        "firmwareVersionString": "3.0.21",
+        "hardwareRevision": 1001,
+        "smartCableUnsynchronized": false,
+        "type": "coprocessor"
+      },
+      {
+        "memorySlots": 4,
+        "model": "BETTER",
+        "position": {
+          "side": 0
+        },
+        "roster": {
+          "fanController": false,
+          "massage": {
+            "foot": true,
+            "head": true,
+            "headTilt": false,
+            "lumbar": false
+          },
+          "motors": {
+            "foot": true,
+            "head": true,
+            "headTilt": false,
+            "lumbar": true
+          }
+        },
+        "type": "controller",
+        "version": 66
+      }
+    ],
+    "snapshots": [
+      {
+        "busyWithCommand": false,
+        "cableTime": 1794096709,
+        "foot": {
+          "massage": {
+            "active": false,
+            "strength": 0
+          },
+          "motor": {
+            "pulseCount": 0
+          }
+        },
+        "head": {
+          "massage": {
+            "active": false,
+            "strength": 0
+          },
+          "motor": {
+            "pulseCount": 6841
+          }
+        },
+        "headTilt": {
+          "massage": {
+            "active": false,
+            "strength": 0
+          },
+          "motor": {
+            "pulseCount": 0
+          }
+        },
+        "lastReceivedControllerDataRelativeMs": 2465073,
+        "lumbar": {
+          "massage": {
+            "active": false,
+            "strength": 0
+          },
+          "motor": {
+            "pulseCount": 0
+          }
+        },
+        "massageFrequency": 0,
+        "massagePattern": 255,
+        "massageTimerMins": 0,
+        "massageTimerSecs": 0,
+        "panelLightOn": false,
+        "safetyLightOn": false,
+        "side": 0,
+        "speakerSync": false,
+        "timeIsSet": true,
+        "timeLastActuatorMovement": 1794075663,
+        "timeLastMassageActive": 1793600786,
+        "windDownMode": 0,
+        "wirelessSync": 0
+      }
+    ],
+    "statusCode": -4,
+    "statusMessage": "RUNTIME ERROR EX: Error Response from SmartCable: RIGHT: (0x02):ERROR (len: 8 seq: 28853) stat: INVALID_PRESET\n"
+  },
+  "id": "TEST_ANDROID_adjustableBaseControls",
+  "statusCode": 28,
+  "statusMessage": "RUNTIME ERROR EX: Error Response from SmartCable: RIGHT: (0x02):ERROR (len: 8 seq: 28853) stat: INVALID_PRESET\n"
+}

@@ -1,0 +1,77 @@
+{
+  "entity": {
+    "binary_sensor": {
+      "massage_active": { "default": "mdi:vibrate" },
+      "moving": { "default": "mdi:bed-outline" },
+      "panel_light": { "default": "mdi:lightbulb-outline" }
+    },
+    "button": {
+      "preset_flat": { "default": "mdi:bed-outline" },
+      "preset_zero_g": { "default": "mdi:bed" },
+      "preset_tv": { "default": "mdi:television" },
+      "preset_anti_snore": { "default": "mdi:sleep-off" },
+      "preset_favorite": { "default": "mdi:star" },
+      "program_zero_g": { "default": "mdi:content-save" },
+      "program_tv": { "default": "mdi:content-save" },
+      "program_anti_snore": { "default": "mdi:content-save" },
+      "program_favorite": { "default": "mdi:content-save" },
+      "massage_head_step": { "default": "mdi:vibrate" },
+      "massage_foot_step": { "default": "mdi:vibrate" },
+      "massage_step": { "default": "mdi:vibrate" },
+      "massage_pattern_step": { "default": "mdi:sine-wave" },
+      "massage_timer_step": { "default": "mdi:timer-outline" }
+    },
+    "cover": {
+      "motor_head": { "default": "mdi:arrow-up-down" },
+      "motor_foot": { "default": "mdi:arrow-up-down" },
+      "motor_lumbar": { "default": "mdi:arrow-up-down" },
+      "motor_head_tilt": { "default": "mdi:arrow-up-down" }
+    },
+    "light": {
+      "safety_light": { "default": "mdi:lightbulb-night" }
+    },
+    "sensor": {
+      "head_angle": { "default": "mdi:angle-acute" },
+      "foot_angle": { "default": "mdi:angle-acute" },
+      "lumbar_position": { "default": "mdi:human-handsdown" },
+      "head_tilt_position": { "default": "mdi:angle-acute" },
+      "head_massage_strength": { "default": "mdi:vibrate" },
+      "foot_massage_strength": { "default": "mdi:vibrate" },
+      "massage_pattern": { "default": "mdi:sine-wave" },
+      "massage_timer": { "default": "mdi:timer-outline" },
+      "air_quality_index": { "default": "mdi:air-filter" },
+      "wifi_signal": { "default": "mdi:wifi" },
+      "last_heartbeat": { "default": "mdi:heart-pulse" },
+      "last_sleep_upload": { "default": "mdi:cloud-upload" },
+      "last_movement": { "default": "mdi:bed-clock" },
+      "sleep_score": { "default": "mdi:sleep" },
+      "night": { "default": "mdi:calendar-moon" },
+      "total_sleep": { "default": "mdi:sleep" },
+      "deep_sleep": { "default": "mdi:power-sleep" },
+      "light_sleep": { "default": "mdi:weather-night" },
+      "rem_sleep": { "default": "mdi:eye-outline" },
+      "awake_time": { "default": "mdi:eye" },
+      "out_of_bed_time": { "default": "mdi:bed-empty" },
+      "sleep_efficiency": { "default": "mdi:percent" },
+      "sleep_goal": { "default": "mdi:target" },
+      "wakeups": { "default": "mdi:alarm" },
+      "out_of_bed_count": { "default": "mdi:bed-empty" },
+      "heart_rate": { "default": "mdi:heart-pulse" },
+      "respiration_rate": { "default": "mdi:lungs" },
+      "hrv_rmssd": { "default": "mdi:heart-flash" },
+      "hrv_sdnn": { "default": "mdi:heart-flash" },
+      "arousal_index": { "default": "mdi:chart-bell-curve" },
+      "breathing_disturbance": { "default": "mdi:lungs" },
+      "bedtime": { "default": "mdi:bed-clock" },
+      "fell_asleep": { "default": "mdi:sleep" },
+      "wake_time": { "default": "mdi:weather-sunset-up" }
+    },
+    "switch": {
+      "snore_relief_tilt": { "default": "mdi:angle-acute" },
+      "snore_relief_vibration": { "default": "mdi:vibrate" }
+    }
+  },
+  "services": {
+    "send_command": { "service": "mdi:console" }
+  }
+}
