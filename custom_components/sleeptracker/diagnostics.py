@@ -20,6 +20,11 @@ TO_REDACT = {
     "mac_address",
     "macOfRemoteAp",
     "SSIDBase64",
+    # The hello payload's Wi-Fi block: network name and LAN addresses.
+    "essid",
+    "essid_b64",
+    "ip",
+    "gw",
     "Serial",
     "serial",
     "mfgSerial",

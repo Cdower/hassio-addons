@@ -260,7 +260,7 @@ async def test_unload(
 async def test_diagnostics_redact(
     hass: HomeAssistant, mock_api: FakeApi, config_entry: MockConfigEntry
 ) -> None:
-    """Diagnostics keep the bed data but drop credentials and serials."""
+    """Diagnostics keep the bed data but drop credentials, serials and network details."""
     from custom_components.sleeptracker.diagnostics import async_get_config_entry_diagnostics
 
     await setup(hass, config_entry)
@@ -269,6 +269,10 @@ async def test_diagnostics_redact(
     assert "hunter2" not in text
     assert EMAIL not in text
     assert "TESTSERIAL0001" not in text
+    assert "00-11-22-33-44-55" not in text
+    wifi = diag["beds"][str(PROCESSOR_ID)]["hello"]["wifi"]
+    assert wifi["essid_b64"] == wifi["ip"] == wifi["gw"] == "**REDACTED**"
+    assert wifi["RSSI"] == -55
     assert diag["sleep"]["nights"] == 3
     assert diag["beds"][str(PROCESSOR_ID)]["status"]["snapshots"][0]["safetyLightOn"] is False
 
