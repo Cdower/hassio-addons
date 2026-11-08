@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import timedelta
+from typing import Any
 
 import voluptuous as vol
 from aiohttp import ClientSession, DummyCookieJar
@@ -23,6 +24,7 @@ from homeassistant.exceptions import (
     ServiceValidationError,
 )
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.typing import ConfigType
@@ -43,6 +45,7 @@ from .const import (
     SERVICE_SEND_COMMAND,
 )
 from .coordinator import SleeptrackerBedCoordinator, SleeptrackerSleepCoordinator
+from .entity import bed_device_info
 from .statistics import async_import_sleep_statistics
 
 _LOGGER = logging.getLogger(__name__)
@@ -130,6 +133,30 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     return True
 
 
+def _link_to_first_bed(
+    hass: HomeAssistant,
+    entry: SleeptrackerConfigEntry,
+    beds: dict[int, SleeptrackerBedCoordinator],
+) -> dict[str, Any]:
+    """Return the device info fields that place the sleep device under the bed.
+
+    Only an entry with bed controls creates the bed device, and the registry
+    rejects a link to a device that does not exist, so without beds there is
+    no link. Home Assistant 2026.8 replaced the `via_device` identifier with
+    `via_device_id`, the bed's registry ID, so the bed device is registered
+    here to get one; older releases still take the identifier.
+    """
+    if not beds:
+        return {}
+    first = next(iter(beds.values()))
+    if "via_device_id" not in getattr(DeviceInfo, "__annotations__", {}):
+        return {"via_device": (DOMAIN, str(first.processor_id))}
+    bed_device = dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id, **bed_device_info(first.data)
+    )
+    return {"via_device_id": bed_device.id}
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: SleeptrackerConfigEntry) -> bool:
     """Log in, discover the account's beds and start polling."""
     api = SleeptrackerApi(
@@ -147,29 +174,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: SleeptrackerConfigEntry)
     status_interval = timedelta(seconds=options.get(CONF_STATUS_INTERVAL, DEFAULT_STATUS_INTERVAL))
     sleep_interval = timedelta(minutes=options.get(CONF_SLEEP_INTERVAL, DEFAULT_SLEEP_INTERVAL))
 
-    bed_controls = options.get(CONF_BED_CONTROLS, True)
-    # Link the sleep device to the bed only when this entry creates the bed
-    # device; a via_device that does not exist is rejected by the registry.
-    first_bed = str(devices[0]["sleeptrackerProcessorID"]) if devices and bed_controls else None
-    sleep_device = DeviceInfo(
-        identifiers={(DOMAIN, f"sleep_{entry.unique_id or entry.entry_id}")},
-        name=f"Sleeptracker sleep ({entry.title})",
-        manufacturer=MANUFACTURER,
-        model="Sleeptracker-AI sleep data",
-        via_device=(DOMAIN, first_bed) if first_bed else None,
-    )
-    runtime = SleeptrackerRuntimeData(
-        api=api,
-        sleep=SleeptrackerSleepCoordinator(hass, entry, api, sleep_interval),
-        sleep_device=sleep_device,
-    )
-
-    if bed_controls:
+    beds: dict[int, SleeptrackerBedCoordinator] = {}
+    if options.get(CONF_BED_CONTROLS, True):
         for device in devices:
             coordinator = SleeptrackerBedCoordinator(hass, entry, api, device, status_interval)
             await coordinator.async_config_entry_first_refresh()
-            runtime.beds[coordinator.processor_id] = coordinator
+            beds[coordinator.processor_id] = coordinator
 
+    runtime = SleeptrackerRuntimeData(
+        api=api,
+        sleep=SleeptrackerSleepCoordinator(hass, entry, api, sleep_interval),
+        sleep_device=DeviceInfo(
+            identifiers={(DOMAIN, f"sleep_{entry.unique_id or entry.entry_id}")},
+            name=f"Sleeptracker sleep ({entry.title})",
+            manufacturer=MANUFACTURER,
+            model="Sleeptracker-AI sleep data",
+            **_link_to_first_bed(hass, entry, beds),
+        ),
+        beds=beds,
+    )
     entry.runtime_data = runtime
 
     @callback

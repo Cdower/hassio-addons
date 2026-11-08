@@ -14,8 +14,6 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import (
-    CONCENTRATION_PARTS_PER_BILLION,
-    CONCENTRATION_PARTS_PER_MILLION,
     DEGREE,
     PERCENTAGE,
     SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
@@ -23,6 +21,19 @@ from homeassistant.const import (
     UnitOfTemperature,
     UnitOfTime,
 )
+
+try:  # Home Assistant 2026.11 and later
+    from homeassistant.const import UnitOfRatio
+
+    PARTS_PER_MILLION = UnitOfRatio.PARTS_PER_MILLION
+    PARTS_PER_BILLION = UnitOfRatio.PARTS_PER_BILLION
+except ImportError:  # the constants it replaced, removed in 2027.8
+    from homeassistant.const import (
+        CONCENTRATION_PARTS_PER_BILLION as PARTS_PER_BILLION,
+    )
+    from homeassistant.const import (
+        CONCENTRATION_PARTS_PER_MILLION as PARTS_PER_MILLION,
+    )
 
 from .const import MASSAGE_PATTERNS
 from .cover import pulse_count
@@ -168,14 +179,14 @@ BED_SENSORS: tuple[BedSensorDescription, ...] = (
     BedSensorDescription(
         key="co2",
         device_class=SensorDeviceClass.CO2,
-        native_unit_of_measurement=CONCENTRATION_PARTS_PER_MILLION,
+        native_unit_of_measurement=PARTS_PER_MILLION,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=_env("co2Ppm", 0),
     ),
     BedSensorDescription(
         key="voc",
         device_class=SensorDeviceClass.VOLATILE_ORGANIC_COMPOUNDS_PARTS,
-        native_unit_of_measurement=CONCENTRATION_PARTS_PER_BILLION,
+        native_unit_of_measurement=PARTS_PER_BILLION,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=_env("vocPpb", 0),
     ),

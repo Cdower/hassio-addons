@@ -88,16 +88,27 @@ async def test_reauth_updates_password(hass: HomeAssistant, config_entry: MockCo
 async def test_options_flow(
     hass: HomeAssistant, mock_api: FakeApi, config_entry: MockConfigEntry
 ) -> None:
-    """Options are saved as integers."""
+    """Options are saved as integers and reload the entry."""
     config_entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    assert hass.states.async_entity_ids("light")
+
     result = await hass.config_entries.options.async_init(config_entry.entry_id)
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         {"bed_controls": False, "status_interval": 30.0, "sleep_interval": 120.0},
     )
+    await hass.async_block_till_done()
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert config_entry.options == {
         "bed_controls": False,
         "status_interval": 30,
         "sleep_interval": 120,
     }
+    # The reload drops the bed's entities once bed controls are off.
+    assert config_entry.state is config_entries.ConfigEntryState.LOADED
+    assert all(
+        hass.states.get(entity_id).state == "unavailable"
+        for entity_id in hass.states.async_entity_ids("light")
+    )

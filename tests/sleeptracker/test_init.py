@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -167,6 +168,25 @@ async def test_send_command_service(
     await hass.async_block_till_done()
     assert mock_api.commands == [(7, {"x": 1})]
     assert result["response"]["snapshots"][0]["side"] == 0
+
+
+async def test_sleep_device_is_under_the_bed(
+    hass: HomeAssistant, mock_api: FakeApi, config_entry: MockConfigEntry
+) -> None:
+    """The sleep device links to the bed device it belongs to."""
+    config_entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    devices = {
+        identifier: device
+        for device in dr.async_entries_for_config_entry(dr.async_get(hass), config_entry.entry_id)
+        for _, identifier in device.identifiers
+    }
+    bed_device = devices[str(PROCESSOR_ID)]
+    sleep_device = devices[f"sleep_{EMAIL}"]
+    assert sleep_device.via_device_id == bed_device.id
+    assert bed_device.name == "Bedroom"
 
 
 async def test_bed_controls_option_off(
