@@ -58,7 +58,8 @@ motor.
 | Sensor | Head angle, foot angle, lumbar and tilt position, head/foot massage strength, massage pattern, massage time left, last movement; room temperature, humidity, CO2, VOC, air-quality index; Wi-Fi signal and RSSI, last cloud check-in, last sleep upload (diagnostic) |
 | Binary sensor | Massage running, moving, panel light (disabled by default); frame connected, cloud connected, left/right sleep sensor connected (diagnostic) |
 
-**Sleep device** (one per account)
+**Sleep device** (one per account, named after the bed, for example "Bedroom
+sleep")
 
 Sensors for the most recent night: sleep score, night (date), total / deep /
 light / REM sleep, awake time, time out of bed, sleep efficiency, sleep goal

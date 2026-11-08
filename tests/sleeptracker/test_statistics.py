@@ -27,7 +27,7 @@ def auto_enable_custom_integrations(
 async def test_statistics_import(recorder_mock: Recorder, hass: HomeAssistant) -> None:
     """Nightly metrics land in the recorder as external statistics."""
     entry = MockConfigEntry(domain="sleeptracker", unique_id=EMAIL, title=EMAIL)
-    await async_import_sleep_statistics(hass, entry, SUMMARIES)
+    await async_import_sleep_statistics(hass, entry, SUMMARIES, "Bedroom sleep")
     await async_wait_recording_done(hass)
 
     stat_id = "sleeptracker:sleeper_example_com_sleep_score"

@@ -187,6 +187,14 @@ async def test_sleep_device_is_under_the_bed(
     sleep_device = devices[f"sleep_{EMAIL}"]
     assert sleep_device.via_device_id == bed_device.id
     assert bed_device.name == "Bedroom"
+    # Named after the bed, so the account's email stays out of entity IDs.
+    assert sleep_device.name == "Bedroom sleep"
+    sleep_ids = [
+        entity.entity_id
+        for entity in er.async_entries_for_device(er.async_get(hass), sleep_device.id)
+    ]
+    assert "sensor.bedroom_sleep_sleep_score" in sleep_ids
+    assert not [i for i in sleep_ids if "example" in i or "sleeper" in i]
 
 
 async def test_bed_controls_option_off(

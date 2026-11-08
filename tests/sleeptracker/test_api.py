@@ -129,11 +129,13 @@ def test_build_statistics() -> None:
     """Each metric becomes one row per night at the hour the night ended."""
     entry = MockConfigEntry(domain="sleeptracker", unique_id=EMAIL, title=EMAIL)
     stats = {
-        meta["statistic_id"]: (meta, rows) for meta, rows in build_statistics(entry, SUMMARIES)
+        meta["statistic_id"]: (meta, rows)
+        for meta, rows in build_statistics(entry, SUMMARIES, "Bedroom sleep")
     }
 
     meta, rows = stats["sleeptracker:sleeper_example_com_sleep_score"]
     assert meta["source"] == "sleeptracker"
+    assert meta["name"] == "Bedroom sleep sleep score"
     assert [r["mean"] for r in rows] == [71, 75, 80]
     assert rows[-1]["start"].isoformat() == "2026-11-07T17:00:00+00:00"
 

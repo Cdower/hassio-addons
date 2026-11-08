@@ -77,7 +77,7 @@ def statistic_id(entry: ConfigEntry, key: str) -> str:
 
 
 def build_statistics(
-    entry: ConfigEntry, summaries: list[dict[str, Any]]
+    entry: ConfigEntry, summaries: list[dict[str, Any]], device_name: str
 ) -> list[tuple[StatisticMetaData, list[StatisticData]]]:
     """Turn sleep summaries into (metadata, rows) pairs, one pair per metric."""
     result = []
@@ -97,7 +97,7 @@ def build_statistics(
         metadata = StatisticMetaData(
             mean_type=StatisticMeanType.ARITHMETIC,
             has_sum=False,
-            name=f"{entry.title} {stat.name.lower()}",
+            name=f"{device_name} {stat.name.lower()}",
             source=DOMAIN,
             statistic_id=statistic_id(entry, stat.key),
             unit_class=stat.unit_class,
@@ -108,11 +108,14 @@ def build_statistics(
 
 
 async def async_import_sleep_statistics(
-    hass: HomeAssistant, entry: ConfigEntry, summaries: list[dict[str, Any]]
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    summaries: list[dict[str, Any]],
+    device_name: str,
 ) -> None:
     """Write every night's metrics to the recorder."""
     if "recorder" not in hass.config.components:
         return
-    for metadata, rows in build_statistics(entry, summaries):
+    for metadata, rows in build_statistics(entry, summaries, device_name):
         async_add_external_statistics(hass, metadata, rows)
     _LOGGER.debug("Imported %d nights of Sleeptracker statistics", len(summaries))

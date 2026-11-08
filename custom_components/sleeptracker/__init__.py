@@ -181,12 +181,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: SleeptrackerConfigEntry)
             await coordinator.async_config_entry_first_refresh()
             beds[coordinator.processor_id] = coordinator
 
+    # Named after the bed rather than the account, so the email address does
+    # not end up in entity IDs. Partners on the same bed each get one; Home
+    # Assistant numbers the second one's entity IDs.
+    bed_name = next((d["name"] for d in devices if d.get("name")), None)
+    sleep_name = f"{bed_name} sleep" if bed_name else "Sleeptracker sleep"
     runtime = SleeptrackerRuntimeData(
         api=api,
         sleep=SleeptrackerSleepCoordinator(hass, entry, api, sleep_interval),
         sleep_device=DeviceInfo(
             identifiers={(DOMAIN, f"sleep_{entry.unique_id or entry.entry_id}")},
-            name=f"Sleeptracker sleep ({entry.title})",
+            name=sleep_name,
             manufacturer=MANUFACTURER,
             model="Sleeptracker-AI sleep data",
             **_link_to_first_bed(hass, entry, beds),
@@ -200,7 +205,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SleeptrackerConfigEntry)
         if runtime.sleep.data:
             entry.async_create_background_task(
                 hass,
-                async_import_sleep_statistics(hass, entry, runtime.sleep.data),
+                async_import_sleep_statistics(hass, entry, runtime.sleep.data, sleep_name),
                 "sleeptracker statistics import",
             )
 
