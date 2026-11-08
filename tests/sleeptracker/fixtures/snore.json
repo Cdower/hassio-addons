@@ -1,0 +1,8 @@
+{
+  "id": "TEST_ANDROID_getSnoreRelief",
+  "snoreRelief": true,
+  "snoreReliefTilt": true,
+  "snoreReliefVibration": true,
+  "statusCode": 0,
+  "statusMessage": ""
+}

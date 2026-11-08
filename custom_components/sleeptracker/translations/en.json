@@ -1,0 +1,158 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Sleeptracker-AI account",
+        "description": "Sign in with the account you use in the Tempur Sleeptracker app. The bed has no local API, so control and sleep data go through the Sleeptracker cloud.",
+        "data": {
+          "email": "Email",
+          "password": "Password"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Sign in again",
+        "description": "The Sleeptracker cloud rejected the saved password for {email}.",
+        "data": {
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid email or password.",
+      "cannot_connect": "Could not reach the Sleeptracker cloud."
+    },
+    "abort": {
+      "already_configured": "This account is already configured.",
+      "reauth_successful": "Signed in again."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "bed_controls": "Control the bed frame from this account",
+          "status_interval": "Bed status polling interval",
+          "sleep_interval": "Sleep data download interval"
+        },
+        "data_description": {
+          "bed_controls": "Turn off for a second account on the same bed (for example a partner's), so only one account creates the frame's controls.",
+          "status_interval": "How often to read the frame's position, massage and light state.",
+          "sleep_interval": "How often to download the account's nightly sleep summaries. Each download fetches the whole history."
+        }
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "frame_connected": { "name": "Frame connected" },
+      "cloud_connected": { "name": "Cloud connected" },
+      "left_sensor_connected": { "name": "Left sleep sensor" },
+      "right_sensor_connected": { "name": "Right sleep sensor" },
+      "massage_active": { "name": "Massage" },
+      "moving": { "name": "Moving" },
+      "panel_light": { "name": "Panel light" }
+    },
+    "button": {
+      "preset_flat": { "name": "Flat" },
+      "preset_zero_g": { "name": "Zero G" },
+      "preset_tv": { "name": "TV" },
+      "preset_anti_snore": { "name": "Anti-snore" },
+      "preset_favorite": { "name": "Favorite" },
+      "program_zero_g": { "name": "Save Zero G position" },
+      "program_tv": { "name": "Save TV position" },
+      "program_anti_snore": { "name": "Save anti-snore position" },
+      "program_favorite": { "name": "Save favorite position" },
+      "massage_head_step": { "name": "Head massage level" },
+      "massage_foot_step": { "name": "Foot massage level" },
+      "massage_step": { "name": "Massage level" },
+      "massage_pattern_step": { "name": "Massage pattern" },
+      "massage_timer_step": { "name": "Massage timer" }
+    },
+    "cover": {
+      "motor_head": { "name": "Head" },
+      "motor_foot": { "name": "Foot" },
+      "motor_lumbar": { "name": "Lumbar" },
+      "motor_head_tilt": { "name": "Head tilt" }
+    },
+    "light": {
+      "safety_light": { "name": "Under-bed light" }
+    },
+    "sensor": {
+      "head_angle": { "name": "Head angle" },
+      "foot_angle": { "name": "Foot angle" },
+      "lumbar_position": { "name": "Lumbar position" },
+      "head_tilt_position": { "name": "Head tilt position" },
+      "head_massage_strength": { "name": "Head massage strength" },
+      "foot_massage_strength": { "name": "Foot massage strength" },
+      "massage_pattern": {
+        "name": "Massage pattern",
+        "state": {
+          "off": "Off",
+          "pulse": "Pulse",
+          "constant": "Constant",
+          "ripple": "Ripple"
+        }
+      },
+      "massage_timer": { "name": "Massage time left" },
+      "temperature": { "name": "Room temperature" },
+      "humidity": { "name": "Room humidity" },
+      "co2": { "name": "Room CO2" },
+      "voc": { "name": "Room VOC" },
+      "air_quality_index": { "name": "Room air quality index" },
+      "wifi_signal": { "name": "Wi-Fi signal" },
+      "wifi_rssi": { "name": "Wi-Fi RSSI" },
+      "last_heartbeat": { "name": "Last cloud check-in" },
+      "last_sleep_upload": { "name": "Last sleep upload" },
+      "last_movement": { "name": "Last movement" },
+      "sleep_score": { "name": "Sleep score" },
+      "night": { "name": "Night" },
+      "total_sleep": { "name": "Total sleep" },
+      "deep_sleep": { "name": "Deep sleep" },
+      "light_sleep": { "name": "Light sleep" },
+      "rem_sleep": { "name": "REM sleep" },
+      "awake_time": { "name": "Awake time" },
+      "out_of_bed_time": { "name": "Time out of bed" },
+      "sleep_efficiency": { "name": "Sleep efficiency" },
+      "sleep_goal": { "name": "Sleep goal reached" },
+      "wakeups": { "name": "Wake-ups" },
+      "out_of_bed_count": { "name": "Times out of bed" },
+      "heart_rate": { "name": "Average heart rate" },
+      "respiration_rate": { "name": "Average respiration rate" },
+      "hrv_rmssd": { "name": "HRV (RMSSD)" },
+      "hrv_sdnn": { "name": "HRV (SDNN)" },
+      "arousal_index": { "name": "Arousal index" },
+      "breathing_disturbance": { "name": "Breathing disturbance" },
+      "bedtime": { "name": "Bedtime" },
+      "fell_asleep": { "name": "Fell asleep" },
+      "wake_time": { "name": "Wake time" }
+    },
+    "switch": {
+      "snore_relief_tilt": { "name": "Snore relief: tilt" },
+      "snore_relief_vibration": { "name": "Snore relief: vibration" }
+    }
+  },
+  "services": {
+    "send_command": {
+      "name": "Send bed command",
+      "description": "Send a raw bedControlCommand code to the bed frame and return the cloud's response. For commands this integration has no entity for.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "The Sleeptracker account whose bed receives the command."
+        },
+        "processor_id": {
+          "name": "Processor ID",
+          "description": "The bed to command, if the account has more than one."
+        },
+        "command": {
+          "name": "Command",
+          "description": "The bedControlCommand code, for example 230 to toggle the under-bed light."
+        },
+        "payload": {
+          "name": "Extra payload",
+          "description": "Extra fields to send with the command."
+        }
+      }
+    }
+  }
+}

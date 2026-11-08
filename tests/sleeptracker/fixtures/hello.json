@@ -1,0 +1,113 @@
+{
+  "helloData": {
+    "FSOS": "6.2.17",
+    "FSPVersion": "6.2.24",
+    "Hardware": "fspimxv6",
+    "NetworkConnectivity": true,
+    "RAPVersion": 2,
+    "SKUSensorCount": 2,
+    "Serial": "TESTSERIAL0001",
+    "ServerConnectivity": true,
+    "SleepTrackerOS": "5.15.71",
+    "SystemType": "i.MX8MN",
+    "boardRevision": "A",
+    "canonicalVersion": "na/5.15.71/6.2.24/2.0.3",
+    "edgeProcessorRunning": true,
+    "gmtLastGoodSleepUpload": 1794095979,
+    "gmtOffset": -28800,
+    "gmtTimeNow": 1794096678,
+    "ledState": {
+      "color": "green",
+      "mode": "on",
+      "state": "foundation_ok"
+    },
+    "leftSensor": {
+      "status": "connected"
+    },
+    "localTimeNow": 1794067878,
+    "macAddress": "00-11-22-33-44-55",
+    "mfgDate": "20250510",
+    "mfgSerial": "TESTSERIAL0001",
+    "motorMeta": {
+      "boardFirmwareVersion": 3000021,
+      "boardFirmwareVersionString": "3.0.21",
+      "boardHardwareVersion": 1001,
+      "boardSerialNumber": "000000000000000000000000",
+      "capabilities": [
+        {
+          "controllerModel": "BETTER",
+          "controllerVersion": 66,
+          "massageRoster": {
+            "foot": true,
+            "head": true,
+            "headTilt": false,
+            "lumbar": false
+          },
+          "memSlotCount": 4,
+          "motorRoster": {
+            "foot": true,
+            "head": true,
+            "headTilt": false,
+            "lumbar": true
+          },
+          "side": 0
+        }
+      ],
+      "connectionStatus": "online",
+      "smartCableUnsynchronized": false
+    },
+    "product": "SleepTracker Gen2",
+    "productFeatures": [
+      "api_flan_config_all",
+      "motors"
+    ],
+    "productModel": "sts60",
+    "rightSensor": {
+      "status": "connected"
+    },
+    "sensors": [
+      {
+        "description": "",
+        "firmwareVersion": "",
+        "hardwareVersion": "",
+        "location": "phono-jack-zero",
+        "locationCode": 2,
+        "model": "",
+        "serial": "",
+        "status": "ACTIVE",
+        "tag": "pz0",
+        "unit": 0
+      },
+      {
+        "description": "",
+        "firmwareVersion": "",
+        "hardwareVersion": "",
+        "location": "phono-jack-one",
+        "locationCode": 3,
+        "model": "",
+        "serial": "",
+        "status": "ACTIVE",
+        "tag": "pz1",
+        "unit": 1
+      }
+    ],
+    "timeValid": true,
+    "wifi": {
+      "RSSI": -55,
+      "channel": 11,
+      "country_code": "US",
+      "essid_b64": "dGVzdC1uZXR3b3Jr",
+      "gw": "192.0.2.1",
+      "ip": "192.0.2.10",
+      "key_mgmt": "WPA2-PSK",
+      "macOfRemoteAp": "00:00:00:00:00:00",
+      "network": "up",
+      "signalGood": true,
+      "signalStrength": 89,
+      "wifi": "up"
+    }
+  },
+  "id": "TEST_ANDROID_cloudIoTProcessorSimpleHello",
+  "statusCode": 0,
+  "statusMessage": ""
+}
