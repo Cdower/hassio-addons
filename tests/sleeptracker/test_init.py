@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock, patch
+
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
@@ -33,7 +35,7 @@ def sleep(hass: HomeAssistant, key: str) -> str:
 async def setup(hass: HomeAssistant, entry: MockConfigEntry) -> None:
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
-    await hass.async_block_till_done()
+    await hass.async_block_till_done(wait_background_tasks=True)
     assert entry.state is ConfigEntryState.LOADED
 
 
@@ -128,7 +130,7 @@ async def test_cover_and_buttons_send_commands(
     await hass.services.async_call(
         "button", "press", {"entity_id": bed(hass, "button", "massage_head_step")}, blocking=True
     )
-    await hass.async_block_till_done()
+    await hass.async_block_till_done(wait_background_tasks=True)
 
     assert mock_api.commands == [
         (100, {}),
@@ -165,7 +167,7 @@ async def test_send_command_service(
         blocking=True,
         return_response=True,
     )
-    await hass.async_block_till_done()
+    await hass.async_block_till_done(wait_background_tasks=True)
     assert mock_api.commands == [(7, {"x": 1})]
     assert result["response"]["snapshots"][0]["side"] == 0
 
@@ -176,7 +178,7 @@ async def test_sleep_device_is_under_the_bed(
     """The sleep device links to the bed device it belongs to."""
     config_entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(config_entry.entry_id)
-    await hass.async_block_till_done()
+    await hass.async_block_till_done(wait_background_tasks=True)
 
     devices = {
         identifier: device
@@ -197,6 +199,41 @@ async def test_sleep_device_is_under_the_bed(
     assert not [i for i in sleep_ids if "example" in i or "sleeper" in i]
 
 
+async def test_statistics_keyed_by_bed_and_side(
+    hass: HomeAssistant, mock_api: FakeApi, config_entry: MockConfigEntry
+) -> None:
+    """Statistic IDs name the bed and the account's side, not the account."""
+    with patch(
+        "custom_components.sleeptracker.async_import_sleep_statistics", AsyncMock()
+    ) as import_stats:
+        config_entry.add_to_hass(hass)
+        assert await hass.config_entries.async_setup(config_entry.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+    _, summaries, sleeper, name = import_stats.call_args.args
+    assert len(summaries) == 3
+    assert sleeper == f"bed{PROCESSOR_ID}_side1"
+    assert name == "Bedroom sleep"
+
+
+async def test_statistics_without_own_sensor(
+    hass: HomeAssistant, mock_api: FakeApi, config_entry: MockConfigEntry
+) -> None:
+    """An account with no sleep sensor on the bed falls back to its entry ID."""
+    sensor_map = await mock_api.async_get_sensor_map(PROCESSOR_ID)
+    for sensor in sensor_map:
+        sensor["self"] = False
+    with (
+        patch.object(mock_api, "async_get_sensor_map", AsyncMock(return_value=sensor_map)),
+        patch(
+            "custom_components.sleeptracker.async_import_sleep_statistics", AsyncMock()
+        ) as import_stats,
+    ):
+        config_entry.add_to_hass(hass)
+        assert await hass.config_entries.async_setup(config_entry.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+    assert import_stats.call_args.args[2] == f"account_{config_entry.entry_id}"
+
+
 async def test_bed_controls_option_off(
     hass: HomeAssistant, mock_api: FakeApi, config_entry: MockConfigEntry
 ) -> None:
@@ -204,7 +241,7 @@ async def test_bed_controls_option_off(
     config_entry.add_to_hass(hass)
     hass.config_entries.async_update_entry(config_entry, options={"bed_controls": False})
     assert await hass.config_entries.async_setup(config_entry.entry_id)
-    await hass.async_block_till_done()
+    await hass.async_block_till_done(wait_background_tasks=True)
 
     registry = er.async_get(hass)
     assert not registry.async_get_entity_id("light", DOMAIN, f"{PROCESSOR_ID}_safety_light")

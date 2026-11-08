@@ -8,7 +8,6 @@ import pytest
 from aiohttp import ClientSession
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.test_util.aiohttp import (
     AiohttpClientMocker,
     AiohttpClientMockResponse,
@@ -127,19 +126,18 @@ def test_parse_sleep_zip_rejects_html() -> None:
 
 def test_build_statistics() -> None:
     """Each metric becomes one row per night at the hour the night ended."""
-    entry = MockConfigEntry(domain="sleeptracker", unique_id=EMAIL, title=EMAIL)
     stats = {
         meta["statistic_id"]: (meta, rows)
-        for meta, rows in build_statistics(entry, SUMMARIES, "Bedroom sleep")
+        for meta, rows in build_statistics(SUMMARIES, "bed100001_side1", "Bedroom sleep")
     }
 
-    meta, rows = stats["sleeptracker:sleeper_example_com_sleep_score"]
+    meta, rows = stats["sleeptracker:bed100001_side1_sleep_score"]
     assert meta["source"] == "sleeptracker"
     assert meta["name"] == "Bedroom sleep sleep score"
     assert [r["mean"] for r in rows] == [71, 75, 80]
     assert rows[-1]["start"].isoformat() == "2026-11-07T17:00:00+00:00"
 
-    _, rows = stats["sleeptracker:sleeper_example_com_total_sleep"]
+    _, rows = stats["sleeptracker:bed100001_side1_total_sleep"]
     assert rows[0]["mean"] == 7.0
 
 

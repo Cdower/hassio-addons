@@ -91,7 +91,7 @@ async def test_options_flow(
     """Options are saved as integers and reload the entry."""
     config_entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(config_entry.entry_id)
-    await hass.async_block_till_done()
+    await hass.async_block_till_done(wait_background_tasks=True)
     assert hass.states.async_entity_ids("light")
 
     result = await hass.config_entries.options.async_init(config_entry.entry_id)
@@ -99,7 +99,7 @@ async def test_options_flow(
         result["flow_id"],
         {"bed_controls": False, "status_interval": 30.0, "sleep_interval": 120.0},
     )
-    await hass.async_block_till_done()
+    await hass.async_block_till_done(wait_background_tasks=True)
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert config_entry.options == {
         "bed_controls": False,

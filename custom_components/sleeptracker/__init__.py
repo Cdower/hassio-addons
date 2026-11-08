@@ -157,6 +157,21 @@ def _link_to_first_bed(
     return {"via_device_id": bed_device.id}
 
 
+async def _async_find_own_sensor(api: SleeptrackerApi, devices: list[dict[str, Any]]) -> str | None:
+    """Return "bed<processor ID>_side<sensor unit>" for the account's sleep sensor.
+
+    Each sleep sensor in a bed's sensor map belongs to one account, and the
+    cloud flags the requesting account's own as `self`. Its unit number is the
+    side of the bed the account sleeps on.
+    """
+    for device in devices:
+        processor_id = device["sleeptrackerProcessorID"]
+        for sensor in await api.async_get_sensor_map(processor_id):
+            if sensor.get("self") and sensor.get("unitNumber") is not None:
+                return f"bed{processor_id}_side{sensor['unitNumber']}"
+    return None
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: SleeptrackerConfigEntry) -> bool:
     """Log in, discover the account's beds and start polling."""
     api = SleeptrackerApi(
@@ -165,6 +180,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SleeptrackerConfigEntry)
     try:
         await api.async_login()
         devices = await api.async_get_devices()
+        own_sensor = await _async_find_own_sensor(api, devices)
     except SleeptrackerAuthError as err:
         raise ConfigEntryAuthFailed(str(err)) from err
     except SleeptrackerError as err:
@@ -186,6 +202,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: SleeptrackerConfigEntry)
     # Assistant numbers the second one's entity IDs.
     bed_name = next((d["name"] for d in devices if d.get("name")), None)
     sleep_name = f"{bed_name} sleep" if bed_name else "Sleeptracker sleep"
+    # Statistics are keyed by bed and side, which are stable and say nothing
+    # about the account; an account without a sleep sensor falls back to the
+    # config entry's ID.
+    statistics_key = own_sensor or f"account_{entry.entry_id}"
     runtime = SleeptrackerRuntimeData(
         api=api,
         sleep=SleeptrackerSleepCoordinator(hass, entry, api, sleep_interval),
@@ -205,7 +225,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: SleeptrackerConfigEntry)
         if runtime.sleep.data:
             entry.async_create_background_task(
                 hass,
-                async_import_sleep_statistics(hass, entry, runtime.sleep.data, sleep_name),
+                async_import_sleep_statistics(hass, runtime.sleep.data, statistics_key, sleep_name),
                 "sleeptracker statistics import",
             )
 

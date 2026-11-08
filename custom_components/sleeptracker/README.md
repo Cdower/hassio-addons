@@ -71,7 +71,7 @@ the recorder.
 
 **Long-term statistics.** Every night the portal holds, back to the bed's
 first recording, is imported as external statistics named
-`sleeptracker:<account>_<metric>`: sleep score, total / deep / light / REM
+`sleeptracker:bed<bed ID>_side<side>_<metric>`: sleep score, total / deep / light / REM
 sleep, awake time, efficiency, wake-ups, heart rate, respiration rate, HRV.
 Add them to a *Statistics graph* card to chart sleep trends over months.
 

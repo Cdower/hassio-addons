@@ -26,7 +26,6 @@ from homeassistant.util import slugify
 from .const import DOMAIN
 
 if TYPE_CHECKING:
-    from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
 
 _LOGGER = logging.getLogger(__name__)
@@ -70,14 +69,16 @@ SLEEP_STATISTICS = (
 )
 
 
-def statistic_id(entry: ConfigEntry, key: str) -> str:
-    """Return the external statistic ID for one metric of one account."""
-    account = slugify(entry.unique_id or entry.entry_id)
-    return f"{DOMAIN}:{account}_{key}"
+def statistic_id(sleeper: str, key: str) -> str:
+    """Return the external statistic ID for one metric of one sleeper.
+
+    `sleeper` identifies whose sleep it is, such as "bed100001_side1".
+    """
+    return f"{DOMAIN}:{slugify(sleeper)}_{key}"
 
 
 def build_statistics(
-    entry: ConfigEntry, summaries: list[dict[str, Any]], device_name: str
+    summaries: list[dict[str, Any]], sleeper: str, device_name: str
 ) -> list[tuple[StatisticMetaData, list[StatisticData]]]:
     """Turn sleep summaries into (metadata, rows) pairs, one pair per metric."""
     result = []
@@ -99,7 +100,7 @@ def build_statistics(
             has_sum=False,
             name=f"{device_name} {stat.name.lower()}",
             source=DOMAIN,
-            statistic_id=statistic_id(entry, stat.key),
+            statistic_id=statistic_id(sleeper, stat.key),
             unit_class=stat.unit_class,
             unit_of_measurement=stat.unit,
         )
@@ -109,13 +110,13 @@ def build_statistics(
 
 async def async_import_sleep_statistics(
     hass: HomeAssistant,
-    entry: ConfigEntry,
     summaries: list[dict[str, Any]],
+    sleeper: str,
     device_name: str,
 ) -> None:
     """Write every night's metrics to the recorder."""
     if "recorder" not in hass.config.components:
         return
-    for metadata, rows in build_statistics(entry, summaries, device_name):
+    for metadata, rows in build_statistics(summaries, sleeper, device_name):
         async_add_external_statistics(hass, metadata, rows)
     _LOGGER.debug("Imported %d nights of Sleeptracker statistics", len(summaries))
