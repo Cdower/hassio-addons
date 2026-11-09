@@ -116,9 +116,9 @@ RUN \
 # to the tailnet. Tarball is fetched over HTTPS from the official publisher
 # and verified against per-arch sha256 pinned below; bump TAILSCALE_VERSION
 # and both hashes together when upgrading.
-ARG TAILSCALE_VERSION="1.104.4"
-ARG TAILSCALE_SHA256_AMD64="624ea093d47d62cf56f17b8332d74b8decda4a1faa610ebc60a1de334b2b3dc9"
-ARG TAILSCALE_SHA256_ARM64="a1c249ce6bdebef62e1ae3b997595555bce2ae4709bf95a718e9ca7a129dad7e"
+ARG TAILSCALE_VERSION="1.104.5"
+ARG TAILSCALE_SHA256_AMD64="720cbbccbfc03d8b55df72afc19e5a72e31b0f65934700aa6fa38074d4ad7bf7"
+ARG TAILSCALE_SHA256_ARM64="e900b0e6e25023a1e504b2c237ce2a32ea0535e006f8c1a1097a490886493b6c"
 RUN \
     case "${BUILD_ARCH}" in \
         amd64) TS_ARCH=amd64; TS_SHA256="${TAILSCALE_SHA256_AMD64}" ;; \
