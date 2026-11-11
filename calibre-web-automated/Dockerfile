@@ -1,4 +1,4 @@
-ARG BUILD_FROM="ghcr.io/new-usemame/calibre-web-nextgen:v4.1.58"
+ARG BUILD_FROM="ghcr.io/new-usemame/calibre-web-nextgen:v4.1.66"
 
 # uv (https://docs.astral.sh/uv/) installs the add-on's Python dependencies
 # from pyproject.toml / uv.lock. This stage only supplies the binary, which is
