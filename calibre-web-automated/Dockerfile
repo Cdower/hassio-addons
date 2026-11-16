@@ -5,7 +5,7 @@ ARG BUILD_FROM="ghcr.io/new-usemame/calibre-web-nextgen:v4.1.58"
 # bind-mounted into the one RUN step that needs it: nothing from it is in the
 # released image. Pinned by tag and digest; Dependabot moves both. Keep the
 # version in step with the uv set up in .github/workflows/ci.yaml.
-FROM ghcr.io/astral-sh/uv:0.13.6@sha256:af22a52f5eafef3d78e551599d405c02df61919d18028f0cea8eda93bc9986d0 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.8@sha256:5cc1805e2426484abca4ad46ea783bab281fdb225fd82d8ce6d66a81254bac85 AS uv
 
 # hadolint ignore=DL3006
 FROM ${BUILD_FROM}
