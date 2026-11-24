@@ -19,6 +19,16 @@ https://github.com/Cdower/hassio-addons
 | **AC Pro Thermostat**     | Local control of the AC Pro X/XB-Series smart communicating touchscreen control | [README](acpro-thermostat/README.md) · [DOCS](acpro-thermostat/DOCS.md)           |
 | **Calibre-Web Automated** | Self-hosted ebook library with automatic ingest, conversion, and metadata       | [README](calibre-web-automated/README.md) · [DOCS](calibre-web-automated/DOCS.md) |
 
+## Integrations
+
+This repository also carries a custom integration, installable with
+[HACS](https://hacs.xyz) by adding this repository URL as a custom repository
+of type *Integration*.
+
+| Integration                   | Description                                                                         | Docs                                                  |
+| ----------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| **Tempur-Pedic Sleeptracker** | Bed-frame control, room environment and nightly sleep data for Tempur Ergo smart bases | [README](custom_components/sleeptracker/README.md) |
+
 ## Contributing
 
 Install the git hooks once per clone so secrets and lint problems are caught
