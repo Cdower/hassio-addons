@@ -218,6 +218,16 @@ async def test_login_419_is_auth_error(
         await make_api(hass).async_login()
 
 
+@pytest.mark.parametrize("body", ["<html>Down for maintenance</html>", "[1, 2]"])
+async def test_non_object_reply_is_connection_error(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker, body: str
+) -> None:
+    """A 200 whose body is not a JSON object is a connection error, not a crash."""
+    aioclient_mock.post(AUTH_URL, text=body)
+    with pytest.raises(SleeptrackerConnectionError):
+        await make_api(hass).async_login()
+
+
 async def test_refused_after_fresh_login_is_not_auth_error(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:

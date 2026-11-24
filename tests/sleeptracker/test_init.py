@@ -263,6 +263,20 @@ async def test_diagnostics_redact(
     """Diagnostics keep the bed data but drop credentials, serials and network details."""
     from custom_components.sleeptracker.diagnostics import async_get_config_entry_diagnostics
 
+    # Fields the fixtures leave empty, filled so their redaction is checked.
+    original_get_devices = mock_api.async_get_devices
+    original_get_sensor_map = mock_api.async_get_sensor_map
+
+    async def get_devices() -> list:
+        return [{**d, "scannedSerialNumber": "SCANNED0001"} for d in await original_get_devices()]
+
+    async def get_sensor_map(processor_id: int) -> list:
+        sensors = await original_get_sensor_map(processor_id)
+        return [{**s, "sensorName": "Sleeper Name"} for s in sensors]
+
+    mock_api.async_get_devices = get_devices
+    mock_api.async_get_sensor_map = get_sensor_map
+
     await setup(hass, config_entry)
     diag = await async_get_config_entry_diagnostics(hass, config_entry)
     text = str(diag)
@@ -270,6 +284,8 @@ async def test_diagnostics_redact(
     assert EMAIL not in text
     assert "TESTSERIAL0001" not in text
     assert "00-11-22-33-44-55" not in text
+    assert "SCANNED0001" not in text
+    assert "Sleeper Name" not in text
     wifi = diag["beds"][str(PROCESSOR_ID)]["hello"]["wifi"]
     assert wifi["essid_b64"] == wifi["ip"] == wifi["gw"] == "**REDACTED**"
     assert wifi["RSSI"] == -55

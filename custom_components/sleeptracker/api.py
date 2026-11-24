@@ -141,9 +141,17 @@ class SleeptrackerApi:
                 if resp.status >= 400:
                     text = await resp.text()
                     raise SleeptrackerConnectionError(f"HTTP {resp.status}: {text[:200]}")
-                return await resp.json(content_type=None) or {}
+                data = await resp.json(content_type=None)
         except (aiohttp.ClientError, TimeoutError) as err:
             raise SleeptrackerConnectionError(str(err) or type(err).__name__) from err
+        except ValueError as err:
+            # A 200 with a body that is not JSON, such as a maintenance page.
+            raise SleeptrackerConnectionError("Response was not JSON") from err
+        if not data:
+            return {}
+        if not isinstance(data, dict):
+            raise SleeptrackerConnectionError("Response was not a JSON object")
+        return data
 
     async def _call(self, path: str, context: str, extra: dict[str, Any]) -> dict[str, Any]:
         """POST to the app API, logging in again once if the token was refused."""

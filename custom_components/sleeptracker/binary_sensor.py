@@ -13,6 +13,7 @@ from homeassistant.components.binary_sensor import (
 )
 from homeassistant.const import EntityCategory
 
+from .coordinator import ZONES
 from .entity import SleeptrackerBedEntity
 
 if TYPE_CHECKING:
@@ -44,10 +45,7 @@ def _massage_active(bed: BedData) -> bool | None:
     snapshot = bed.snapshot
     if snapshot is None:
         return None
-    return any(
-        ((snapshot.get(zone) or {}).get("massage") or {}).get("active")
-        for zone in ("head", "foot", "lumbar", "headTilt")
-    )
+    return any(((snapshot.get(zone) or {}).get("massage") or {}).get("active") for zone in ZONES)
 
 
 @dataclass(frozen=True, kw_only=True)

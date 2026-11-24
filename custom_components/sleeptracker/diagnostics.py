@@ -31,8 +31,11 @@ TO_REDACT = {
     "processorSerialNumber",
     "powerBaseSerialNumber",
     "boardSerialNumber",
+    "scannedSerialNumber",
     "userID",
     "userFirstName",
+    # A sleep sensor's user-chosen label, which can be a person's name.
+    "sensorName",
     "title",
     "unique_id",
 }
