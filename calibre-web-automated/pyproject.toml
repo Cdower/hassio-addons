@@ -22,7 +22,9 @@ requires-python = ">=3.13"
 dependencies = [
   # Cloudflare Access verifier (rootfs/opt/cwa-access/verifier.py) validates
   # Cf-Access-Jwt-Assertion with it; /lsiopy's cryptography is its RS256 backend.
-  "PyJWT==2.10.1",
+  # Written in lower case: Dependabot's uv updater looks for the normalised
+  # name case-sensitively and cannot update a "PyJWT==" pin.
+  "pyjwt==2.15.1",
 ]
 
 [dependency-groups]
