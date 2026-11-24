@@ -1,7 +1,12 @@
 """Bump one add-on's version and promote its changelog's Unreleased section.
 
 Reads ADDON, VERSION and TODAY from the environment and rewrites
-<addon>/config.yaml and <addon>/CHANGELOG.md in place. Writes a `warning`
+<addon>/config.yaml and <addon>/CHANGELOG.md in place. With PREVIOUS_TAG set
+to the add-on's last release tag, it first adds a line to the Unreleased
+section for any shipped Python package whose version differs between that
+tag's <addon>/uv.lock and the current one and that the section does not
+already mention, so dependency updates reach the release notes without each
+Dependabot PR having to write one. Writes a `warning`
 output to GITHUB_OUTPUT describing anything the author needs to fix by hand
 (an empty or missing Unreleased section), or an empty string when the bump
 was clean. Used by .github/workflows/bump.yaml.
@@ -9,7 +14,12 @@ was clean. Used by .github/workflows/bump.yaml.
 
 import os
 import re
+import subprocess
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import changelog_entry  # noqa: E402
+import dependency_changes  # noqa: E402
 
 addon = os.environ["ADDON"]
 version = os.environ["VERSION"]
@@ -34,6 +44,40 @@ with open(config, "w", encoding="utf-8") as handle:
 changelog = os.path.join(addon, "CHANGELOG.md")
 heading = f"## [{version}] - {today}"
 warning = ""
+
+
+def unreleased_notes():
+    """Return the text of the changelog's Unreleased section, or None if the
+    changelog or the section is missing."""
+    if not os.path.exists(changelog):
+        return None
+    with open(changelog, encoding="utf-8") as handle:
+        sections = re.split(r"(?m)^(?=## )", handle.read())
+    return next((s for s in sections if changelog_entry.UNRELEASED.match(s.split("\n")[0])), None)
+
+
+def previous_lock(tag):
+    """Return <addon>/uv.lock as of `tag`, or None if the tag or file is missing."""
+    result = subprocess.run(
+        ["git", "show", f"refs/tags/{tag}:{addon}/uv.lock"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.stdout if result.returncode == 0 else None
+
+
+lock = os.path.join(addon, "uv.lock")
+previous_tag = os.environ.get("PREVIOUS_TAG", "")
+notes = unreleased_notes()
+if previous_tag and notes is not None and os.path.exists(lock):
+    before = previous_lock(previous_tag)
+    if before is not None:
+        with open(lock, encoding="utf-8") as handle:
+            line = dependency_changes.describe(before, handle.read(), notes)
+        if line is not None:
+            # The pattern never matches: this only ever adds the line.
+            changelog_entry.add_or_update(changelog, re.compile(r"(?!)"), "", line)
 
 if not os.path.exists(changelog):
     lines = [

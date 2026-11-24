@@ -188,8 +188,13 @@ jobs:
           title="${ADDON}: update Tailscale to ${VERSION}"
           body="${RUNNER_TEMP}/pr-body.md"
           {
+            # PREVIOUS is what the default branch pins. That is not always
+            # what the last release shipped: an earlier update may be merged
+            # but unreleased, and the changelog entry counts from the release.
             echo "Updates the Tailscale client bundled into \`${ADDON}\`" \
-                 "from ${PREVIOUS} to ${VERSION}."
+                 "to ${VERSION}. The default branch pins ${PREVIOUS}; the" \
+                 "changelog entry counts from the version the last release" \
+                 "shipped."
             echo
             echo "- \`${ADDON}/Dockerfile\`: \`TAILSCALE_VERSION\` and both" \
                  "per-arch sha256 pins. Both tarballs were downloaded from" \

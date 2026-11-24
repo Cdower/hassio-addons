@@ -1,0 +1,77 @@
+---
+name: Dependabot watch
+
+# Reports Dependabot update runs that failed. A failed run opens no PR and
+# sends no notice, so a dependency can sit unpatched while everything looks
+# quiet: the uv updates for calibre-web-automated failed every week for three
+# weeks before anyone looked. Dependabot checks on Mondays; this runs the day
+# after, looks at the most recent run of each update (one per ecosystem and
+# directory in .github/dependabot.yml) and fails, with a link to each failing
+# run, if any of them ended in failure. GitHub mails the repository owner
+# when a scheduled workflow fails.
+#
+# Find the reason in the failing run's log (Insights -> Dependency graph ->
+# Dependabot shows the same runs), fix it, and re-run that update from there.
+
+# yamllint disable-line rule:truthy
+on:
+  schedule:
+    - cron: "47 4 * * 2"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: dependabot-watch
+  cancel-in-progress: true
+
+jobs:
+  watch:
+    name: Check the latest Dependabot runs
+    runs-on: ubuntu-26.04-arm
+    permissions:
+      actions: read
+    steps:
+      - name: Look for failed update runs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          since=$(date --utc --date='8 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          # Dependabot's runs are "dynamic" workflow runs named
+          # "<ecosystem> in <directory> - Update #<id>". Newest first, so the
+          # first run seen for each update is its latest.
+          gh api --paginate --method GET "repos/${GITHUB_REPOSITORY}/actions/runs" \
+            --raw-field event=dynamic --raw-field "created=>=${since}" --raw-field per_page=100 \
+            --jq '.workflow_runs[]
+                  | select(.path == "dynamic/dependabot/dependabot-updates")
+                  | select(.status == "completed")
+                  | [(.name | sub(" - Update #[0-9]+$"; "")), .conclusion, .html_url]
+                  | @tsv' > "${RUNNER_TEMP}/runs.tsv"
+
+          if [[ ! -s "${RUNNER_TEMP}/runs.tsv" ]]; then
+            echo "::error::No Dependabot update ran in the last 8 days. Is" \
+                 "Dependabot still enabled, and .github/dependabot.yml valid?"
+            exit 1
+          fi
+
+          failed=0
+          declare -A seen=()
+          {
+            echo "### Latest Dependabot update runs"
+            echo
+            echo "| Update | Result |"
+            echo "| --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          while IFS=$'\t' read -r update conclusion url; do
+            if [[ -n "${seen[${update}]:-}" ]]; then
+              continue
+            fi
+            seen[${update}]=1
+            echo "| ${update} | [${conclusion}](${url}) |" >> "$GITHUB_STEP_SUMMARY"
+            if [[ "${conclusion}" == "failure" ]]; then
+              echo "::error::Dependabot's latest '${update}' run failed: ${url}"
+              failed=1
+            fi
+          done < "${RUNNER_TEMP}/runs.tsv"
+          exit "${failed}"
