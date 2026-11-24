@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.1.70.0] - 2026-11-24
+
 ### Changed
 
 - Updated the bundled Tailscale client from 1.104.2 to 1.104.7.

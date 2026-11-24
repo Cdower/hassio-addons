@@ -1,6 +1,6 @@
 ---
 name: AC Pro Thermostat
-version: "1.0.0"
+version: "1.0.1"
 # version: "dev"
 slug: acpro-thermostat
 description: Local control of the AC Pro X/XB-Series smart communicating touchscreen thermostat
