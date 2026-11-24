@@ -286,6 +286,11 @@ async def test_diagnostics_redact(
     assert "00-11-22-33-44-55" not in text
     assert "SCANNED0001" not in text
     assert "Sleeper Name" not in text
+    device = diag["beds"][str(PROCESSOR_ID)]["device"]
+    assert device["deviceID"] == device["sleeptrackerID"] == device["name"] == "**REDACTED**"
+    sensors = diag["beds"][str(PROCESSOR_ID)]["sensor_map"]
+    assert {s["sensorID"] for s in sensors} == {"**REDACTED**"}
+    assert "Bedroom" not in text
     wifi = diag["beds"][str(PROCESSOR_ID)]["hello"]["wifi"]
     assert wifi["essid_b64"] == wifi["ip"] == wifi["gw"] == "**REDACTED**"
     assert wifi["RSSI"] == -55

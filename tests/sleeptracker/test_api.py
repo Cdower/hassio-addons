@@ -228,6 +228,16 @@ async def test_non_object_reply_is_connection_error(
         await make_api(hass).async_login()
 
 
+@pytest.mark.parametrize("body", ["{}", "null"])
+async def test_empty_reply_is_empty_dict(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker, body: str
+) -> None:
+    """An empty object or a JSON null still reads as an empty reply."""
+    url = f"{API_BASE}/settings/getSnoreRelief"
+    aioclient_mock.post(url, text=body)
+    assert await make_api(hass)._post_json(url, {}, "Bearer tok") == {}
+
+
 async def test_refused_after_fresh_login_is_not_auth_error(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:

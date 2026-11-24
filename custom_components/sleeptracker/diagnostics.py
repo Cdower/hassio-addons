@@ -36,6 +36,11 @@ TO_REDACT = {
     "userFirstName",
     # A sleep sensor's user-chosen label, which can be a person's name.
     "sensorName",
+    # Cloud account and hardware IDs, and the user-chosen bed name.
+    "deviceID",
+    "sleeptrackerID",
+    "sensorID",
+    "name",
     "title",
     "unique_id",
 }
