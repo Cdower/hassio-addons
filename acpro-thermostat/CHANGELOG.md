@@ -1,9 +1,13 @@
 # Changelog
 
-## Unreleased
+## [Unreleased]
+
+## [1.0.1] - 2026-11-24
 
 ### Changed
 
+- Updated cryptography from 50.0.0 to 50.0.2 and paho-mqtt from 2.1.0 to
+  2.2.0.
 - The add-on's Python dependencies (cryptography and paho-mqtt) are now
   declared in `pyproject.toml` and pinned, hashes included, in `uv.lock`; the
   image build installs exactly that with [uv](https://docs.astral.sh/uv/)
