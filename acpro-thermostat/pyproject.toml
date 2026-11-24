@@ -21,7 +21,7 @@ dependencies = [
   # (rootfs/opt/acpro/acpro_thermostat/protocol.py).
   "cryptography==50.0.2",
   # MQTT discovery and state publishing (rootfs/opt/acpro/acpro_thermostat/bridge.py).
-  "paho-mqtt==2.1.0",
+  "paho-mqtt==2.2.0",
 ]
 
 [dependency-groups]
