@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Updated the bundled Tailscale client from 1.104.2 to 1.104.4.
 - The add-on's own Python dependency (PyJWT, for Cloudflare Access mode) is now declared in `pyproject.toml` and pinned, hashes included, in `uv.lock`; the image build installs exactly that with [uv](https://docs.astral.sh/uv/) instead of a loose `pip install`. The packages CI needs for the test suite live in a separate `test` dependency group that never reaches the image. No change to what the add-on ships or does.
-- Updated the base image from Calibre-Web NextGen v4.1.58 to [v4.1.70](https://github.com/new-usemame/calibre-web-nextgen/blob/v4.1.70/CHANGELOG.md).
+- Updated the base image from Calibre-Web NextGen v4.1.58 to [v4.1.70](https://github.com/new-usemame/calibre-web-nextgen/blob/v4.1.70/CHANGELOG.md). Upstream changes include FBZ uploads, uploads imported under the browser's file name instead of the staging name, book copies onto NFS shares that refuse extended attributes no longer failing, and OPDS clients with a wrong password under anonymous browsing now getting a sign-in error instead of the guest catalog. Upstream's overridden `svc-calibre-web-automated/run` is unchanged, so the `-i $CWA_BIND_ADDRESS` loopback pin for Cloudflare Access mode carries over as is.
 
 ## [4.1.58.0] - 2026-10-30
 
