@@ -1,0 +1,28 @@
+---
+send_command:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: sleeptracker
+    processor_id:
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 999999999
+          mode: box
+    command:
+      required: true
+      example: 230
+      selector:
+        number:
+          min: 0
+          max: 9999
+          mode: box
+    payload:
+      required: false
+      example: '{"massageAdjustment": 1, "requestStatus": true}'
+      selector:
+        object:

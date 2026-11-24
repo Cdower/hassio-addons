@@ -1,0 +1,14 @@
+{
+  "domain": "sleeptracker",
+  "name": "Tempur-Pedic Sleeptracker",
+  "codeowners": ["@Cdower"],
+  "config_flow": true,
+  "after_dependencies": ["recorder"],
+  "documentation": "https://github.com/Cdower/hassio-addons/tree/main/custom_components/sleeptracker",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/Cdower/hassio-addons/issues",
+  "loggers": ["custom_components.sleeptracker"],
+  "requirements": [],
+  "version": "0.1.0"
+}

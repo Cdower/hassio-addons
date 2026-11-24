@@ -1,4 +1,12 @@
 ARG BUILD_FROM="ghcr.io/new-usemame/calibre-web-nextgen:v4.1.58"
+
+# uv (https://docs.astral.sh/uv/) installs the add-on's Python dependencies
+# from pyproject.toml / uv.lock. This stage only supplies the binary, which is
+# bind-mounted into the one RUN step that needs it: nothing from it is in the
+# released image. Pinned by tag and digest; Dependabot moves both. Keep the
+# version in step with the uv set up in .github/workflows/ci.yaml.
+FROM ghcr.io/astral-sh/uv:0.13.9@sha256:d3b601f0c7b118bc1753febf7c41cc80981df678445e0254284eecf84db79a7d AS uv
+
 # hadolint ignore=DL3006
 FROM ${BUILD_FROM}
 
@@ -69,16 +77,28 @@ RUN \
 
 # nginx + PyJWT power the optional Cloudflare Access mode: nginx fronts CWA
 # (LAN header-stripping listener on 8083, JWT-gated listener on 8085) and the
-# verifier validates Cf-Access-Jwt-Assertion with PyJWT. PyJWT rides the
-# /lsiopy venv, whose `cryptography` (upstream pyproject.toml) provides the
-# RS256 backend. Ubuntu's nginx-core includes http_auth_request_module.
-ARG PYJWT_VERSION="2.10.1"
+# verifier validates Cf-Access-Jwt-Assertion with PyJWT. Ubuntu's nginx-core
+# includes http_auth_request_module.
+#
+# PyJWT is the add-on's own Python dependency: pyproject.toml declares it and
+# uv.lock pins it, so `uv export` of the lock is a hash-pinned requirements
+# file that uv installs into the base image's /lsiopy venv, whose
+# `cryptography` (upstream pyproject.toml) provides the RS256 backend.
+# `--locked` fails the build if uv.lock no longer matches pyproject.toml, so
+# an edit made without `uv lock` cannot ship the old pin. `--no-default-groups`
+# leaves out the `test` dependency group (pytest and the cryptography/werkzeug
+# pins CI needs), which never reaches the image.
+COPY pyproject.toml uv.lock /tmp/cwa-addon/
 # hadolint ignore=DL3008
-RUN \
+RUN --mount=type=bind,from=uv,source=/uv,target=/usr/local/bin/uv \
     apt-get update \
     && apt-get install -y --no-install-recommends nginx \
     && rm -rf /var/lib/apt/lists/* /etc/nginx/sites-enabled/default \
-    && /lsiopy/bin/pip install --no-cache-dir "PyJWT==${PYJWT_VERSION}"
+    && uv export --project /tmp/cwa-addon --locked --no-default-groups \
+        --no-emit-project --output-file /tmp/cwa-addon/requirements.txt \
+    && uv pip install --python /lsiopy/bin/python3 --no-cache \
+        --require-hashes --requirements /tmp/cwa-addon/requirements.txt \
+    && rm -rf /tmp/cwa-addon
 
 # cifs-utils provides mount.cifs for the optional `smb_share` option: the
 # add-on mounts the share itself so it can choose the files' owner (Home
@@ -96,9 +116,9 @@ RUN \
 # to the tailnet. Tarball is fetched over HTTPS from the official publisher
 # and verified against per-arch sha256 pinned below; bump TAILSCALE_VERSION
 # and both hashes together when upgrading.
-ARG TAILSCALE_VERSION="1.104.2"
-ARG TAILSCALE_SHA256_AMD64="512f613ed7d04fc7282f7dc5bd76aa105aae28168fbb9357eb749ebcbc29f0ae"
-ARG TAILSCALE_SHA256_ARM64="5776aaa901b5ef1916e66be5bb54b9f481cd399c9c28db123a8cab620efa237b"
+ARG TAILSCALE_VERSION="1.104.7"
+ARG TAILSCALE_SHA256_AMD64="e56693ff74a64f2591b7e819c280635a100aae1ddfb0ef058fcd052b7cd8d16c"
+ARG TAILSCALE_SHA256_ARM64="d6bed2720310b328b861f943d7b4016c5358a9bad60575eb51e8143b79068484"
 RUN \
     case "${BUILD_ARCH}" in \
         amd64) TS_ARCH=amd64; TS_SHA256="${TAILSCALE_SHA256_AMD64}" ;; \

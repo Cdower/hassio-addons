@@ -2,7 +2,7 @@
 # as `ruff check` and `ruff format`.
 
 # Match the Python shipped by the add-on base images (see the Dockerfiles);
-# keep in step with python-version in .github/workflows/ci.yaml.
+# keep in step with the add-ons' .python-version files.
 target-version = "py313"
 line-length = 100
 # Where the add-on packages live, so isort groups them as first-party rather

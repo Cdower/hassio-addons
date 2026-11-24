@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Updated the bundled Tailscale client from 1.104.2 to 1.104.7.
+- The add-on's own Python dependency (PyJWT, for Cloudflare Access mode) is now declared in `pyproject.toml` and pinned, hashes included, in `uv.lock`; the image build installs exactly that with [uv](https://docs.astral.sh/uv/) instead of a loose `pip install`. The packages CI needs for the test suite live in a separate `test` dependency group that never reaches the image. No change to what the add-on ships or does.
+
+## [4.1.58.0] - 2026-10-30
+
+### Changed
+
 - Updated the base image from Calibre-Web NextGen v4.1.57 to [v4.1.58](https://github.com/new-usemame/calibre-web-nextgen/blob/v4.1.58/CHANGELOG.md).
 - Updated the bundled Tailscale client from 1.104.1 to 1.104.2.
 

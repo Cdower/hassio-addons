@@ -25,7 +25,7 @@ WATCHED = {
     " add-on (`-i $CWA_BIND_ADDRESS`), `cwa-init` and"
     " `cwa-auto-library` are dependencies of the add-on's oneshots,"
     " and a new service may need AppArmor rules",
-    "Dockerfile": "the `/lsiopy` venv the add-on pip-installs PyJWT into",
+    "Dockerfile": "the `/lsiopy` venv the add-on installs PyJWT (pyproject.toml / uv.lock) into",
     "pyproject.toml": "`cryptography` and `werkzeug` in `/lsiopy`",
     "cps/cli.py": "the `-i` bind-address flag",
     "cps/constants.py": "`CWA_PORT_OVERRIDE`",
