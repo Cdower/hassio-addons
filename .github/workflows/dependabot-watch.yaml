@@ -64,10 +64,10 @@ jobs:
             echo "| --- | --- |"
           } >> "$GITHUB_STEP_SUMMARY"
           while IFS=$'\t' read -r update conclusion url; do
-            if [[ -n "${seen[${update}]:-}" ]]; then
+            if [[ -n "${seen["${update}"]:-}" ]]; then
               continue
             fi
-            seen[${update}]=1
+            seen["${update}"]=1
             echo "| ${update} | [${conclusion}](${url}) |" >> "$GITHUB_STEP_SUMMARY"
             if [[ "${conclusion}" == "failure" ]]; then
               echo "::error::Dependabot's latest '${update}' run failed: ${url}"

@@ -277,7 +277,7 @@ jobs:
           # image's environment has pip.
           docker run --rm --entrypoint "${python}" "${IMAGE}" -c '
           from importlib.metadata import distributions
-          for line in sorted({f"{d.metadata["Name"]}=={d.version}" for d in distributions()}):
+          for line in sorted({f"{d.name}=={d.version}" for d in distributions()}):
               print(line)
           ' > "${RUNNER_TEMP}/image-packages.txt"
           {
