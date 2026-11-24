@@ -1,0 +1,31 @@
+name: "Copilot Setup Steps"
+
+# Setup steps for GitHub Copilot to ensure dependencies are properly configured.
+# This workflow runs before Copilot starts work to validate and configure the environment.
+
+on:
+    workflow_dispatch:
+    push:
+        paths:
+            - .github/workflows/copilot-setup-steps.yml
+    pull_request:
+        paths:
+            - .github/workflows/copilot-setup-steps.yml
+
+jobs:
+    # The job MUST be called `copilot-setup-steps` or it will not be picked up by Copilot.
+    copilot-setup-steps:
+        runs-on: ubuntu-latest
+
+        # Minimal permissions needed for repository access
+        permissions:
+            contents: read
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v5
+
+            - name: Verify Python environment
+              run: |
+                  python --version
+                  pip --version
