@@ -5,7 +5,7 @@ ARG BUILD_FROM="ghcr.io/home-assistant/amd64-base-python:3.13-alpine3.24-2026.08
 # bind-mounted into the one RUN step that needs it: nothing from it is in the
 # released image. Pinned by tag and digest; Dependabot moves both. Keep the
 # version in step with the uv set up in .github/workflows/ci.yaml.
-FROM ghcr.io/astral-sh/uv:0.13.6@sha256:af22a52f5eafef3d78e551599d405c02df61919d18028f0cea8eda93bc9986d0 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.9@sha256:d3b601f0c7b118bc1753febf7c41cc80981df678445e0254284eecf84db79a7d AS uv
 
 # hadolint ignore=DL3006
 FROM ${BUILD_FROM}

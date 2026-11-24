@@ -5,7 +5,7 @@ ARG BUILD_FROM="ghcr.io/new-usemame/calibre-web-nextgen:v4.1.58"
 # bind-mounted into the one RUN step that needs it: nothing from it is in the
 # released image. Pinned by tag and digest; Dependabot moves both. Keep the
 # version in step with the uv set up in .github/workflows/ci.yaml.
-FROM ghcr.io/astral-sh/uv:0.13.6@sha256:af22a52f5eafef3d78e551599d405c02df61919d18028f0cea8eda93bc9986d0 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.9@sha256:d3b601f0c7b118bc1753febf7c41cc80981df678445e0254284eecf84db79a7d AS uv
 
 # hadolint ignore=DL3006
 FROM ${BUILD_FROM}
@@ -116,9 +116,9 @@ RUN \
 # to the tailnet. Tarball is fetched over HTTPS from the official publisher
 # and verified against per-arch sha256 pinned below; bump TAILSCALE_VERSION
 # and both hashes together when upgrading.
-ARG TAILSCALE_VERSION="1.104.4"
-ARG TAILSCALE_SHA256_AMD64="624ea093d47d62cf56f17b8332d74b8decda4a1faa610ebc60a1de334b2b3dc9"
-ARG TAILSCALE_SHA256_ARM64="a1c249ce6bdebef62e1ae3b997595555bce2ae4709bf95a718e9ca7a129dad7e"
+ARG TAILSCALE_VERSION="1.104.7"
+ARG TAILSCALE_SHA256_AMD64="e56693ff74a64f2591b7e819c280635a100aae1ddfb0ef058fcd052b7cd8d16c"
+ARG TAILSCALE_SHA256_ARM64="d6bed2720310b328b861f943d7b4016c5358a9bad60575eb51e8143b79068484"
 RUN \
     case "${BUILD_ARCH}" in \
         amd64) TS_ARCH=amd64; TS_SHA256="${TAILSCALE_SHA256_AMD64}" ;; \
