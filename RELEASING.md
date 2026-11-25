@@ -135,10 +135,17 @@ PR's branch. The workflow does not replace an open PR that has commits by
 anyone else.
 
 The **Dependabot watch** workflow runs the day after Dependabot's weekly
-check and fails if the latest run of any update failed. A failed Dependabot
-run opens no PR and tells nobody, so without this a dependency can stop
-receiving updates unnoticed. When it fails, open the linked run, fix the
-cause and re-run that update from Insights → Dependency graph → Dependabot.
+check. It reads `.github/dependabot.yml` and fails if the latest run of any
+update failed, or if an update listed there did not run at all in the last 8
+days. A failed Dependabot run opens no PR and tells nobody, and neither does
+an update that is no longer scheduled, so without this a dependency can stop
+receiving updates unnoticed. An update added since the previous week's check
+is let off until Dependabot has had a weekly check to run it. When the
+workflow fails, open the linked run, fix the cause and re-run that update
+from Insights → Dependency graph → Dependabot; for an update that did not
+run, check that Dependabot lists it there at all. How the workflow matches
+Dependabot's run names to the entries in `dependabot.yml` is described in
+`.github/scripts/dependabot-watch.py`.
 
 ### Changelog entries for dependency updates
 

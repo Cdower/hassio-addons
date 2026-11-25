@@ -1,17 +1,22 @@
 ---
 name: Dependabot watch
 
-# Reports Dependabot update runs that failed. A failed run opens no PR and
-# sends no notice, so a dependency can sit unpatched while everything looks
-# quiet: the uv updates for calibre-web-automated failed every week for three
-# weeks before anyone looked. Dependabot checks on Mondays; this runs the day
-# after, looks at the most recent run of each update (one per ecosystem and
-# directory in .github/dependabot.yml) and fails, with a link to each failing
-# run, if any of them ended in failure. GitHub mails the repository owner
-# when a scheduled workflow fails.
+# Reports Dependabot updates that failed or stopped running. Neither opens a
+# PR or sends a notice, so a dependency can sit unpatched while everything
+# looks quiet: the uv updates for calibre-web-automated failed every week for
+# three weeks before anyone looked. Dependabot checks on Mondays; this runs
+# the day after and, for each update in .github/dependabot.yml (one per
+# ecosystem and directory, or directories), fails with a link to its latest
+# run if that run failed, or names it if it did not run at all in the last 8
+# days. An update added since the previous check is let off until it has had
+# a weekly check of its own. GitHub mails the repository owner when a
+# scheduled workflow fails. The matching is in
+# .github/scripts/dependabot-watch.py, with how Dependabot names its runs.
 #
 # Find the reason in the failing run's log (Insights -> Dependency graph ->
 # Dependabot shows the same runs), fix it, and re-run that update from there.
+# For an update that did not run, check that .github/dependabot.yml is valid
+# and that Dependabot still lists the update there.
 
 # yamllint disable-line rule:truthy
 on:
@@ -30,55 +35,50 @@ jobs:
     name: Check the latest Dependabot runs
     runs-on: ubuntu-26.04-arm
     permissions:
-      actions: read
+      actions: read  # to list Dependabot's runs
+      contents: read  # to read .github/dependabot.yml and its history
     steps:
-      - name: Look for failed update runs
+      # The whole history, for .github/dependabot.yml as it stood when the
+      # window opened (see below).
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Look for failed and missing update runs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           since=$(date --utc --date='8 days ago' +%Y-%m-%dT%H:%M:%SZ)
-          # Dependabot's runs are "dynamic" workflow runs named
-          # "<ecosystem> in <directory> - Update #<id>"; a security update
-          # or a rebase of one PR adds " for <packages>" after the directory.
-          # Both parts are dropped, so every run of one ecosystem and
-          # directory counts as the same update and a failed one-off run is
-          # superseded by the next run that succeeds. Newest first, so the
-          # first run seen for each update is its latest.
+          # Dependabot's runs are "dynamic" workflow runs. Newest first, so
+          # the first run the script sees for each update is its latest.
           gh api --paginate --method GET "repos/${GITHUB_REPOSITORY}/actions/runs" \
             --raw-field event=dynamic --raw-field "created=>=${since}" --raw-field per_page=100 \
             --jq '.workflow_runs[]
                   | select(.path == "dynamic/dependabot/dependabot-updates")
                   | select(.status == "completed")
-                  | [(.name | sub("( for .*)? - Update #[0-9]+$"; "")), .conclusion, .html_url]
+                  | [.name, .conclusion, .html_url]
                   | @tsv' > "${RUNNER_TEMP}/runs.tsv"
 
-          if [[ ! -s "${RUNNER_TEMP}/runs.tsv" ]]; then
-            echo "::error::No Dependabot update ran in the last 8 days. Is" \
-                 "Dependabot still enabled, and .github/dependabot.yml valid?"
-            exit 1
+          yq --no-colors --output-format json eval '.' .github/dependabot.yml \
+            > "${RUNNER_TEMP}/config.json"
+          # A new update has no run until Dependabot's next weekly check, so
+          # one may legitimately be missing from the window. Comparing with
+          # the file as it stood when the window opened tells such an update
+          # from one that stopped running: anything already there then has
+          # had a full week to run. Taking the file's state, not when each
+          # entry was written, also keeps a reshaped entry (two docker
+          # entries folded into one with `directories:`) checked throughout.
+          previous=$(git rev-list -1 --before="${since}" HEAD)
+          if [[ -n "${previous}" ]] \
+            && git cat-file -e "${previous}:.github/dependabot.yml" 2>/dev/null; then
+            git show "${previous}:.github/dependabot.yml" \
+              | yq --no-colors --output-format json eval '.' - > "${RUNNER_TEMP}/previous.json"
+          else
+            echo '{}' > "${RUNNER_TEMP}/previous.json"
           fi
 
-          failed=0
-          declare -A seen=()
-          {
-            echo "### Latest Dependabot update runs"
-            echo
-            echo "| Update | Result |"
-            echo "| --- | --- |"
-          } >> "$GITHUB_STEP_SUMMARY"
-          while IFS=$'\t' read -r update conclusion url; do
-            if [[ -n "${seen["${update}"]:-}" ]]; then
-              continue
-            fi
-            seen["${update}"]=1
-            echo "| ${update} | [${conclusion}](${url}) |" >> "$GITHUB_STEP_SUMMARY"
-            case "${conclusion}" in
-              failure | timed_out | startup_failure)
-                echo "::error::Dependabot's latest '${update}' run ended in" \
-                     "${conclusion}: ${url}"
-                failed=1
-                ;;
-            esac
-          done < "${RUNNER_TEMP}/runs.tsv"
-          exit "${failed}"
+          python3 -I .github/scripts/dependabot-watch.py "${RUNNER_TEMP}/config.json" \
+            "${RUNNER_TEMP}/previous.json" "${RUNNER_TEMP}/runs.tsv"
