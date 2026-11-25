@@ -1,0 +1,63 @@
+---
+name: Copilot Setup Steps
+
+# Setup steps for GitHub Copilot: installs the toolchain CI uses (uv, each
+# add-on's Python and locked dependencies, prek) before Copilot starts work.
+
+# yamllint disable-line rule:truthy
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+  pull_request:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+
+permissions: {}
+
+jobs:
+  # The job MUST be called `copilot-setup-steps` or Copilot will not pick it up.
+  copilot-setup-steps:
+    runs-on: ubuntu-26.04
+    # Minimal permissions needed for repository access.
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Read the uv version the images build with
+        id: uv
+        # Same source as the test-app job in ci.yaml: the uv stage pinned in
+        # the add-on Dockerfiles.
+        run: |
+          shopt -s nullglob
+          versions=$(
+            sed -n 's|^FROM ghcr.io/astral-sh/uv:\([^@ ]*\)@sha256:[0-9a-f]* *AS uv$|\1|p' \
+              ./*/Dockerfile | sort -u
+          )
+          if [[ $(wc -l <<< "${versions}") -ne 1 || -z "${versions}" ]]; then
+            echo "::error::Expected exactly one uv version pinned in the add-on Dockerfiles"
+            exit 1
+          fi
+          echo "version=${versions}" >> "$GITHUB_OUTPUT"
+      - name: Set up uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2  # v10.3.3
+        with:
+          version: ${{ steps.uv.outputs.version }}
+          enable-cache: true
+      - name: Install add-on environments and dev tools
+        # Each add-on's Python (from its .python-version) and locked test
+        # dependencies, as the tests run in CI, plus prek for the lint hooks.
+        run: |
+          shopt -s nullglob
+          for pyproject in */pyproject.toml; do
+            addon="${pyproject%/pyproject.toml}"
+            echo "::group::${addon}"
+            uv sync --project "${addon}" --locked --group test
+            echo "::endgroup::"
+          done
+          uv tool install prek
+          prek --version
