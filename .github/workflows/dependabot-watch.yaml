@@ -39,14 +39,18 @@ jobs:
           set -euo pipefail
           since=$(date --utc --date='8 days ago' +%Y-%m-%dT%H:%M:%SZ)
           # Dependabot's runs are "dynamic" workflow runs named
-          # "<ecosystem> in <directory> - Update #<id>". Newest first, so the
+          # "<ecosystem> in <directory> - Update #<id>"; a security update
+          # or a rebase of one PR adds " for <packages>" after the directory.
+          # Both parts are dropped, so every run of one ecosystem and
+          # directory counts as the same update and a failed one-off run is
+          # superseded by the next run that succeeds. Newest first, so the
           # first run seen for each update is its latest.
           gh api --paginate --method GET "repos/${GITHUB_REPOSITORY}/actions/runs" \
             --raw-field event=dynamic --raw-field "created=>=${since}" --raw-field per_page=100 \
             --jq '.workflow_runs[]
                   | select(.path == "dynamic/dependabot/dependabot-updates")
                   | select(.status == "completed")
-                  | [(.name | sub(" - Update #[0-9]+$"; "")), .conclusion, .html_url]
+                  | [(.name | sub("( for .*)? - Update #[0-9]+$"; "")), .conclusion, .html_url]
                   | @tsv' > "${RUNNER_TEMP}/runs.tsv"
 
           if [[ ! -s "${RUNNER_TEMP}/runs.tsv" ]]; then

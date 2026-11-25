@@ -32,6 +32,6 @@ will be told why.
 
 ## How dependencies are kept current
 
-Every dependency is pinned (commit SHAs, image digests or hashes) and moved by
-reviewed pull requests: see the dependency sections of
-[RELEASING.md](RELEASING.md).
+Every dependency is pinned (commit SHAs, hashes, image digests or, for the
+add-on base images, exact release tags) and moved by reviewed pull requests:
+see the dependency sections of [RELEASING.md](RELEASING.md).
