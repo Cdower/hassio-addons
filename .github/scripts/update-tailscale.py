@@ -42,7 +42,7 @@ with open(dockerfile, "w", encoding="utf-8") as handle:
 changelog = os.path.join(addon, "CHANGELOG.md")
 changelog_entry.add_or_update(
     changelog,
-    re.compile(r"^(- Updated the bundled Tailscale client from \S+ to )\S+?\.$"),
+    re.compile(r"^(- Updated the bundled Tailscale client from \S+ to )\S+\.(?=\s|$)"),
     rf"\g<1>{version}.",
     f"- Updated the bundled Tailscale client from {previous} to {version}.",
 )
