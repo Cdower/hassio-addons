@@ -190,7 +190,12 @@ jobs:
         # .python-version names.
         run: |
           shopt -s nullglob
-          for project in tests/*/pyproject.toml; do
+          projects=(tests/*/pyproject.toml)
+          if [[ ${#projects[@]} -eq 0 ]]; then
+            echo "::error::No custom integration test suites found"
+            exit 1
+          fi
+          for project in "${projects[@]}"; do
             suite="${project%/pyproject.toml}"
             echo "::group::${suite}"
             uv run --project "${suite}" --locked \

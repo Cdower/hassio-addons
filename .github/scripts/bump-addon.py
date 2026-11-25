@@ -72,7 +72,14 @@ previous_tag = os.environ.get("PREVIOUS_TAG", "")
 notes = unreleased_notes()
 if previous_tag and notes is not None and os.path.exists(lock):
     before = previous_lock(previous_tag)
-    if before is not None:
+    if before is None:
+        # Not an error (a first release has no tag), but worth saying: the
+        # release notes then carry no line for changed Python packages.
+        print(
+            f"::notice::No {lock} at tag {previous_tag}; Python package changes "
+            "since the last release were not added to the changelog"
+        )
+    else:
         with open(lock, encoding="utf-8") as handle:
             line = dependency_changes.describe(before, handle.read(), notes)
         if line is not None:

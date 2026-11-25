@@ -110,7 +110,7 @@ if updated:
 
     changelog_entry.add_or_update(
         os.path.join(addon, "CHANGELOG.md"),
-        re.compile(r"^(- Updated the Home Assistant base image from \S+ to )\S+?\.$"),
+        re.compile(r"^(- Updated the Home Assistant base image from \S+ to )\S+\.(?=\s|$)"),
         rf"\g<1>{latest}.",
         f"- Updated the Home Assistant base image from {current} to {latest}.",
     )

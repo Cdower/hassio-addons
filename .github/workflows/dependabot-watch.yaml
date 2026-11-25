@@ -69,9 +69,12 @@ jobs:
             fi
             seen["${update}"]=1
             echo "| ${update} | [${conclusion}](${url}) |" >> "$GITHUB_STEP_SUMMARY"
-            if [[ "${conclusion}" == "failure" ]]; then
-              echo "::error::Dependabot's latest '${update}' run failed: ${url}"
-              failed=1
-            fi
+            case "${conclusion}" in
+              failure | timed_out | startup_failure)
+                echo "::error::Dependabot's latest '${update}' run ended in" \
+                     "${conclusion}: ${url}"
+                failed=1
+                ;;
+            esac
           done < "${RUNNER_TEMP}/runs.tsv"
           exit "${failed}"

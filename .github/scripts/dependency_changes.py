@@ -18,14 +18,26 @@ def runtime_packages(lock_text):
     """
     packages = {package["name"]: package for package in tomllib.loads(lock_text)["package"]}
     roots = [p for p in packages.values() if "virtual" in p.get("source", {})]
-    pending = [dep["name"] for root in roots for dep in root.get("dependencies", [])]
+    # (name, extra) pairs still to visit; extra None is the package itself. A
+    # dependency written `name[extra]` also pulls in what that extra lists
+    # under the package's optional-dependencies.
+    pending = [dep for root in roots for dep in root.get("dependencies", [])]
     shipped = {}
+    seen = set()
     while pending:
-        name = pending.pop()
-        if name in shipped or name not in packages:
+        dep = pending.pop()
+        name = dep["name"]
+        if name not in packages:
             continue
-        shipped[name] = packages[name]["version"]
-        pending += [dep["name"] for dep in packages[name].get("dependencies", [])]
+        for extra in (None, *dep.get("extra", [])):
+            if (name, extra) in seen:
+                continue
+            seen.add((name, extra))
+            if extra is None:
+                shipped[name] = packages[name]["version"]
+                pending += packages[name].get("dependencies", [])
+            else:
+                pending += packages[name].get("optional-dependencies", {}).get(extra, [])
     return shipped
 
 

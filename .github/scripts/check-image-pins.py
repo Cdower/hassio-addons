@@ -35,7 +35,9 @@ with open(pyproject, "rb") as handle:
 mismatches = 0
 checked = 0
 for requirement in group:
-    match = re.fullmatch(r"\s*([A-Za-z0-9][A-Za-z0-9._-]*)\s*==\s*([^\s;]+)\s*", str(requirement))
+    match = re.fullmatch(
+        r"\s*([A-Za-z0-9][A-Za-z0-9._-]*)\s*==\s*([^\s;]+)\s*(?:;.*)?", str(requirement)
+    )
     if match is None:
         continue
     name, pinned = normalise(match.group(1)), match.group(2)
