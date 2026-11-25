@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Updated the base image from Calibre-Web NextGen v4.1.70 to [v4.1.74](https://github.com/new-usemame/calibre-web-nextgen/blob/v4.1.74/CHANGELOG.md).
+
 ## [4.1.70.0] - 2026-11-24
 
 ### Changed
