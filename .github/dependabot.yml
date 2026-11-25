@@ -20,8 +20,10 @@
 # Keep requirement names in pyproject.toml lower case: Dependabot's uv updater
 # matches them case-sensitively and fails on a mixed-case pin.
 #
-# The Dependabot watch workflow reports update runs that failed, which
-# otherwise goes unnoticed: a failed run simply opens no PR.
+# The Dependabot watch workflow reports update runs that failed, and updates
+# listed here that stopped running, which otherwise goes unnoticed: neither
+# opens a PR. It reads this file, so it needs no change when an entry is
+# added or removed.
 #
 # The cooldown waits a week after a release before proposing it, so a version
 # that is yanked or found compromised within days never reaches a PR.
