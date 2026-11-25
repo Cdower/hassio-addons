@@ -103,7 +103,59 @@ with its title and body already filled in.
 The weekly **Tailscale** workflow, which opens PRs that update the Tailscale
 client bundled into calibre-web-automated, uses the same token and the same
 fallback. Until its PR is open, each scheduled run pushes the branch again and
-repeats the link. So does the weekly **Base image** workflow below.
+repeats the link. So do the weekly **Base image** and **Pins** workflows
+below.
+
+## Dependency updates
+
+Everything is pinned, and every pin has something that moves it by pull
+request:
+
+| Pin | Moved by |
+| --- | --- |
+| GitHub Actions (commit SHAs) | Dependabot, one grouped PR a week |
+| Add-on Python dependencies (`pyproject.toml`, `uv.lock`) | Dependabot |
+| The Sleeptracker test environment (`tests/sleeptracker`), and through its test harness the Home Assistant version the tests run on | Dependabot, one grouped PR |
+| The uv image both add-ons build with | Dependabot, one PR for both Dockerfiles |
+| prek, the hook runner | Follows the `j178/prek-action` pin: CI installs the newest prek that action release has a checksum for |
+| prek hooks (`prek.toml`) | **Pins** workflow |
+| AC Pro Thermostat's Home Assistant base image | **Pins** workflow |
+| Calibre-Web NextGen base image | **Base image** workflow |
+| Bundled Tailscale client | **Tailscale** workflow |
+| `cryptography` and `werkzeug` in calibre-web-automated's `test` group | By hand with the base image; CI's build job fails when they disagree with the image |
+
+Dependabot and the prek hooks wait a week after a release before proposing
+it. `.github/dependabot.yml` has the details.
+
+The **Pins** workflow runs weekly and opens one PR per pin from its own
+`deps/` branch. It keeps the Python version of the Home Assistant base image
+(move that by hand, together with `.python-version`, `uv.lock` and ruff's
+`target-version`), and a newer linter may find new things: fix those on the
+PR's branch. The workflow does not replace an open PR that has commits by
+anyone else.
+
+The **Dependabot watch** workflow runs the day after Dependabot's weekly
+check and fails if the latest run of any update failed. A failed Dependabot
+run opens no PR and tells nobody, so without this a dependency can stop
+receiving updates unnoticed. When it fails, open the linked run, fix the
+cause and re-run that update from Insights → Dependency graph → Dependabot.
+
+### Changelog entries for dependency updates
+
+A release's notes should say what it ships differently, dependencies
+included:
+
+- The Base image, Tailscale and Pins workflows write their own entry under
+  `## [Unreleased]`, and keep it to one line per dependency while several
+  updates pile up unreleased.
+- Dependabot's PRs do not touch the changelog, and need not. The **Bump**
+  workflow compares the add-on's `uv.lock` with the one at the previous
+  release tag and adds one line listing every shipped Python package whose
+  version changed. Test-only packages are left out.
+- If an update changes behaviour, write a proper entry on its PR. Bump leaves
+  out any package the Unreleased section already names.
+- Build-time tools (uv, GitHub Actions, the prek hooks) never reach the image
+  and get no entry.
 
 ## Base image updates
 
@@ -140,7 +192,8 @@ head commit, so the gate still sees it.
 That works with no setup. If you would rather have the ordinary flow, add a
 repository secret named `BUMP_TOKEN` holding a PAT with `contents:write` and
 `pull-requests:write`: the workflow pushes with it instead, CI attaches to the
-PR by itself, and the manual dispatch is skipped.
+PR by itself, and the manual dispatch is skipped. The Tailscale, Base image
+and Pins workflows use the same secret the same way.
 
 ## Guard rails
 

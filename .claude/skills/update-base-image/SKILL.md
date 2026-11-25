@@ -114,9 +114,11 @@ corresponding add-on code/tests must be updated:
 - `CHANGELOG.md`: new `## [X.Y.Z]` section (Keep a Changelog).
 - Mentions of the old version in comments (`tests/test_arxiv.py`, the svc run
   override header) — bump them. If the image's `/lsiopy` moved `cryptography`
-  or `werkzeug` (`/lsiopy/bin/pip list` in the new image), move the `test`
-  group pins in `calibre-web-automated/pyproject.toml` to match and run
-  `uv lock --project calibre-web-automated`.
+  or `werkzeug`, move the `test` group pins in
+  `calibre-web-automated/pyproject.toml` to match and run
+  `uv lock --project calibre-web-automated`. CI's build job checks this: it
+  lists the built image's packages in the job summary and fails when either
+  pin disagrees, so no image pull is needed to find the versions.
 
 ## 6. Gate
 

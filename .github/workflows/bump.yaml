@@ -130,6 +130,9 @@ jobs:
         env:
           ADDON: ${{ steps.resolve.outputs.addon }}
           VERSION: ${{ inputs.version }}
+          # The last release's tag: the bump lists the Python packages that
+          # changed since then in the release notes.
+          PREVIOUS_TAG: ${{ steps.resolve.outputs.slug }}-v${{ steps.resolve.outputs.current }}
         run: |
           set -euo pipefail
           TODAY="$(date --utc +%F)" python3 .github/scripts/bump-addon.py

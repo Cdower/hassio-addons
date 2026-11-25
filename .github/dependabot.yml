@@ -6,13 +6,22 @@
 #   comments), grouped into one PR a week;
 # - each add-on's Python dependencies (pyproject.toml + uv.lock, runtime and
 #   the CI-only `test` group alike);
+# - the test environment of the custom integration under tests/;
 # - the uv image the add-ons' Dockerfiles build with.
 #
-# Not Dependabot's to move: the Calibre-Web NextGen base image (the Base image
-# workflow, which also reports upstream drift the add-on must be checked
-# against), the bundled Tailscale client (the Tailscale workflow), the add-on
-# base images pinned through build.yaml / `ARG BUILD_FROM` (Dependabot only
-# reads literal `FROM` lines), and the prek hooks in prek.toml.
+# Not Dependabot's to move, because it only reads literal `FROM` lines and
+# knows neither prek.toml nor a tarball pinned by hash. The Pins workflow
+# covers the AC Pro Thermostat base image (build.yaml / `ARG BUILD_FROM`) and
+# the prek hooks; the Base image workflow covers the Calibre-Web NextGen base
+# image and reports the upstream drift the add-on must be checked against; the
+# Tailscale workflow covers the bundled Tailscale client. prek itself follows
+# the prek-action pin (see ci.yaml).
+#
+# Keep requirement names in pyproject.toml lower case: Dependabot's uv updater
+# matches them case-sensitively and fails on a mixed-case pin.
+#
+# The Dependabot watch workflow reports update runs that failed, which
+# otherwise goes unnoticed: a failed run simply opens no PR.
 #
 # The cooldown waits a week after a release before proposing it, so a version
 # that is yanked or found compromised within days never reaches a PR.
@@ -50,16 +59,33 @@ updates:
     cooldown:
       default-days: 7
 
-  - package-ecosystem: docker
-    directory: /calibre-web-automated
+  # The Sleeptracker integration's test environment. Its one direct pin, the
+  # custom-component test harness, pins the Home Assistant release the tests
+  # run against, so this is also what moves that forward.
+  - package-ecosystem: uv
+    directory: /tests/sleeptracker
     schedule:
       interval: weekly
     cooldown:
       default-days: 7
+    groups:
+      sleeptracker-tests:
+        patterns:
+          - "*"
 
+  # Both add-ons build with the same uv image and CI requires them to agree
+  # (the tests run on the uv version the Dockerfiles pin), so the two
+  # directories are one entry and one group: a bump arrives as a single PR
+  # that moves both Dockerfiles together.
   - package-ecosystem: docker
-    directory: /acpro-thermostat
+    directories:
+      - /calibre-web-automated
+      - /acpro-thermostat
     schedule:
       interval: weekly
     cooldown:
       default-days: 7
+    groups:
+      docker:
+        patterns:
+          - "*"

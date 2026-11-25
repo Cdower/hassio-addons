@@ -1,21 +1,37 @@
 # Security Policy
 
-## Supported Versions
+## Supported versions
 
-Use this section to tell people about which versions of your project are
-currently being supported with security updates.
+Each add-on and integration in this repository is supported at its latest
+release only. Fixes ship in a new release; older versions are not patched.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 5.1.x   | :white_check_mark: |
-| 5.0.x   | :x:                |
-| 4.0.x   | :white_check_mark: |
-| < 4.0   | :x:                |
+| Component | Supported |
+| --- | --- |
+| Calibre-Web Automated add-on | Latest release |
+| AC Pro Thermostat add-on | Latest release |
+| Tempur-Pedic Sleeptracker integration | Latest commit on `main` |
 
-## Reporting a Vulnerability
+A problem in something an add-on only packages (Calibre-Web NextGen,
+Tailscale, a Python library) is best reported to that project. Report it here
+as well if the add-on's own configuration or scripts make it worse, or if the
+add-on needs to pick up a fixed version.
 
-Use this section to tell people how to report a vulnerability.
+## Reporting a vulnerability
 
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+Please do not open a public issue for a security problem. Report it privately
+through GitHub: on this repository's **Security** tab, choose **Report a
+vulnerability**. That opens a private advisory only the maintainer can see.
+
+Include the add-on or integration and its version, how it is configured (the
+access mode, for Calibre-Web Automated), and the steps that show the problem.
+
+This is a personal project maintained in spare time. Expect a first reply
+within about a week. If the report is accepted, the fix is released and
+credited in the changelog unless you prefer otherwise; if it is declined, you
+will be told why.
+
+## How dependencies are kept current
+
+Every dependency is pinned (commit SHAs, hashes, image digests or, for the
+add-on base images, exact release tags) and moved by reviewed pull requests:
+see the dependency sections of [RELEASING.md](RELEASING.md).

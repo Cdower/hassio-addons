@@ -95,7 +95,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Run Add-on Lint
-        uses: frenck/action-addon-linter@d51677290aef26cdfc835271dd3c7343ce502809  # v2.21.2
+        uses: frenck/action-app-linter@d51677290aef26cdfc835271dd3c7343ce502809  # v2.21.2
         with:
           community: false
           path: "./${{ matrix.addon }}"
@@ -111,6 +111,13 @@ jobs:
           persist-credentials: false
       - name: Run prek hooks
         uses: j178/prek-action@7b101f8338a08d2bd6fdb3625e4e7692428763a3  # v3.1.1
+        with:
+          # The newest prek this pinned action release bundles a checksum
+          # for, so the download is always verified. The default, `latest`,
+          # follows prek's releases at run time and installs one the action
+          # has no checksum for without verifying it. prek therefore moves
+          # when Dependabot moves the action pin above.
+          prek-version: latest-known
         env:
           # Lets zizmor run its online audits (known-vulnerable and stale
           # action pins); without a token it falls back to offline mode.
@@ -176,6 +183,25 @@ jobs:
               pytest "${suite}" -v
             echo "::endgroup::"
           done
+      - name: Run custom integration tests
+        # The integrations under custom_components/ are tested against Home
+        # Assistant itself, in an environment of their own
+        # (tests/<integration>/pyproject.toml and uv.lock) on the Python its
+        # .python-version names.
+        run: |
+          shopt -s nullglob
+          projects=(tests/*/pyproject.toml)
+          if [[ ${#projects[@]} -eq 0 ]]; then
+            echo "::error::No custom integration test suites found"
+            exit 1
+          fi
+          for project in "${projects[@]}"; do
+            suite="${project%/pyproject.toml}"
+            echo "::group::${suite}"
+            uv run --project "${suite}" --locked \
+              pytest -c "${suite}/pytest.ini" "${suite}" -v
+            echo "::endgroup::"
+          done
 
   build:
     name: Build ${{ matrix.addon }} (${{ matrix.architecture }})
@@ -219,6 +245,9 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
         with:
           push: false
+          # Loaded into the runner's Docker so the step below can look inside.
+          load: true
+          tags: ci/${{ matrix.addon }}:${{ matrix.architecture }}
           context: ${{ steps.info.outputs.target }}
           file: ${{ steps.info.outputs.target }}/Dockerfile
           platforms: ${{ steps.flags.outputs.platform }}
@@ -233,6 +262,40 @@ jobs:
             BUILD_REF=${{ github.sha }}
             BUILD_REPOSITORY=${{ github.repository }}
             BUILD_VERSION=ci
+      - name: Check the test pins against the image
+        # An add-on whose `test` dependency group mirrors packages its base
+        # image ships names that image's Python in a `# image-python:` line of
+        # pyproject.toml. This lists what the built image really has and fails
+        # when a mirrored pin has fallen behind it, which happens when a base
+        # image update moves a package.
+        env:
+          ADDON: ${{ matrix.addon }}
+          IMAGE: ci/${{ matrix.addon }}:${{ matrix.architecture }}
+        run: |
+          set -euo pipefail
+          python=$(sed -n 's/^# image-python: *//p' "${ADDON}/pyproject.toml")
+          if [[ -z "${python}" ]]; then
+            echo "${ADDON} mirrors no image packages in its test group"
+            exit 0
+          fi
+          # Asked of the interpreter itself, so it works whether or not the
+          # image's environment has pip.
+          docker run --rm --entrypoint "${python}" "${IMAGE}" -c '
+          from importlib.metadata import distributions
+          for line in sorted({f"{d.name}=={d.version}" for d in distributions()}):
+              print(line)
+          ' > "${RUNNER_TEMP}/image-packages.txt"
+          {
+            echo "<details><summary>Python packages in ${IMAGE}</summary>"
+            echo
+            echo '```text'
+            cat "${RUNNER_TEMP}/image-packages.txt"
+            echo '```'
+            echo
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+          python3 -I .github/scripts/check-image-pins.py \
+            "${ADDON}/pyproject.toml" "${RUNNER_TEMP}/image-packages.txt"
 
   # The single check branch protection requires. Everything above reaches main
   # through this job, so the gated set is maintained here in code rather than as

@@ -1,0 +1,235 @@
+---
+name: Pins
+
+# Keeps the pins current that nothing else moves. Dependabot covers the
+# GitHub Actions, the Python dependencies and the uv image
+# (.github/dependabot.yml), and the Base image and Tailscale workflows cover
+# calibre-web-automated's base image and Tailscale client. That leaves:
+#
+# - the Home Assistant base image acpro-thermostat builds from. build.yaml and
+#   the Dockerfile's `ARG BUILD_FROM` name it, and Dependabot only reads
+#   literal `FROM` lines;
+# - the hook revisions in prek.toml, a file Dependabot does not know.
+#
+# Once a week each is checked, and when something newer exists a PR is opened
+# (or refreshed) from its own deps/ branch. The prek hooks wait a week after a
+# release, as Dependabot's cooldown does. The Home Assistant base images carry
+# no usable release date in the registry, so those are proposed as soon as
+# both architectures have the tag.
+
+# yamllint disable-line rule:truthy
+on:
+  schedule:
+    - cron: "23 5 * * 2"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Show the diffs without pushing a branch or opening a PR
+        required: false
+        default: false
+        type: boolean
+
+permissions: {}
+
+concurrency:
+  group: pins
+  cancel-in-progress: false
+
+env:
+  BOT_EMAIL: "41898282+github-actions[bot]@users.noreply.github.com"
+
+jobs:
+  update:
+    name: Update ${{ matrix.pin }}
+    runs-on: ubuntu-26.04-arm
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - pin: acpro-thermostat base image
+            kind: ha-base-image
+            addon: acpro-thermostat
+            branch: deps/acpro-thermostat-base-image
+          - pin: prek hooks
+            kind: prek-hooks
+            addon: ""
+            branch: deps/prek-hooks
+    env:
+      KIND: ${{ matrix.kind }}
+      ADDON: ${{ matrix.addon }}
+      BRANCH: ${{ matrix.branch }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+          # Credentials are kept because this job pushes the update branch.
+          # A push made with GITHUB_TOKEN triggers no workflows, so prefer a
+          # BUMP_TOKEN PAT when one is configured. Without it the PR step
+          # dispatches CI by hand, as the Bump workflow does.
+          # zizmor: ignore[artipacked] - the pushed branch is the deliverable
+          token: ${{ secrets.BUMP_TOKEN || secrets.GITHUB_TOKEN }}
+      - name: Install prek
+        if: ${{ matrix.kind == 'prek-hooks' }}
+        uses: j178/prek-action@7b101f8338a08d2bd6fdb3625e4e7692428763a3  # v3.1.1
+        with:
+          install-only: true
+          # As in ci.yaml: the newest prek the action can verify.
+          prek-version: latest-known
+      - name: Apply the update
+        id: apply
+        run: |
+          set -euo pipefail
+          body="${RUNNER_TEMP}/pr-body.md"
+          case "${KIND}" in
+            ha-base-image)
+              python3 -I .github/scripts/update-ha-base-image.py
+              previous=$(sed -n 's/^previous=//p' "$GITHUB_OUTPUT")
+              latest=$(sed -n 's/^latest=//p' "$GITHUB_OUTPUT")
+              title="${ADDON}: update the Home Assistant base image to ${latest}"
+              {
+                echo "Moves \`${ADDON}\` from the Home Assistant base image" \
+                     "\`${previous}\` to \`${latest}\`, the newest release for the" \
+                     "same Python that both architectures have."
+                echo
+                echo "- \`${ADDON}/build.yaml\`, \`${ADDON}/Dockerfile\`: image pins."
+                echo "- \`${ADDON}/CHANGELOG.md\`: entry under Unreleased."
+                echo
+                echo "Release notes: https://github.com/home-assistant/docker-base/releases"
+                echo
+                echo "The add-on's version is unchanged. To ship it, run **Bump** and" \
+                     "then **Release** after merging. See RELEASING.md."
+              } > "${body}"
+              ;;
+            prek-hooks)
+              prek update --freeze --cooldown-days 7 | tee "${RUNNER_TEMP}/prek-update.txt"
+              title="Update the prek hooks"
+              {
+                echo "Moves the hook revisions in \`prek.toml\` to their newest" \
+                     "releases that are at least a week old (\`prek update --freeze" \
+                     "--cooldown-days 7\`). Each \`rev\` stays a full commit SHA, with" \
+                     "the tag it belongs to in the comment beside it."
+                echo
+                echo '```text'
+                cat "${RUNNER_TEMP}/prek-update.txt"
+                echo '```'
+                echo
+                echo "A newer linter can report things the old one did not: if CI's" \
+                     "Prek job fails here, fix what it found on this branch."
+              } > "${body}"
+              ;;
+            *)
+              echo "::error::Unknown kind '${KIND}'"
+              exit 1
+              ;;
+          esac
+
+          if git diff --quiet; then
+            echo "::notice::Nothing to update"
+            echo "update=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          {
+            echo "### Update diff"
+            echo '```diff'
+            git --no-pager diff
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "update=true"
+            echo "title=${title}"
+          } >> "$GITHUB_OUTPUT"
+      - name: Open or refresh the PR
+        if: ${{ steps.apply.outputs.update == 'true' && !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ secrets.BUMP_TOKEN || secrets.GITHUB_TOKEN }}
+          TITLE: ${{ steps.apply.outputs.title }}
+          HAVE_PAT: ${{ secrets.BUMP_TOKEN != '' }}
+        run: |
+          set -euo pipefail
+          body="${RUNNER_TEMP}/pr-body.md"
+          existing=""
+          if git rev-parse --verify --quiet "refs/remotes/origin/${BRANCH}" > /dev/null; then
+            existing=$(gh pr list --head "${BRANCH}" --state open --json number --jq '.[0].number')
+            # The working tree is the default branch plus this update. If the
+            # open PR's branch already has exactly that content, leave it be.
+            if [[ -n "${existing}" ]] && git diff --quiet "origin/${BRANCH}" --; then
+              echo "::notice::The open PR from ${BRANCH} already carries this update"
+              exit 0
+            fi
+            # Someone fixing what a newer linter found, say, commits on top of
+            # the workflow's own commit. Force-pushing would discard that
+            # work, so leave the open PR alone until it is merged or closed.
+            others=$(
+              git log --format=%ae "HEAD..origin/${BRANCH}" \
+                | { grep --invert-match --fixed-strings --line-regexp "${BOT_EMAIL}" || true; }
+            )
+            if [[ -n "${existing}" && -n "${others}" ]]; then
+              echo "::warning::The open PR from ${BRANCH} has commits by others than" \
+                   "this workflow; not replacing it. Merge or close it first."
+              exit 0
+            fi
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "${BOT_EMAIL}"
+          git switch --force-create "${BRANCH}"
+          git commit --quiet --all --message "${TITLE}"
+          # The branch belongs to this workflow and is rebuilt from the default
+          # branch each time, so an older, unmerged update is replaced.
+          git push --quiet --force origin "${BRANCH}"
+
+          if [[ "${HAVE_PAT}" != "true" ]]; then
+            gh workflow run ci.yaml --ref "${BRANCH}"
+            {
+              echo
+              echo "CI was started by hand on this branch, because the push came" \
+                   "from \`GITHUB_TOKEN\` and so triggered nothing. It reports" \
+                   "against this same commit, so the required check still applies."
+            } >> "${body}"
+          fi
+
+          if [[ -n "${existing}" ]]; then
+            gh pr edit "${existing}" --title "${TITLE}" --body-file "${body}"
+            exit 0
+          fi
+          error="${RUNNER_TEMP}/pr-create.err"
+          if gh pr create \
+               --base "${GITHUB_REF_NAME}" \
+               --head "${BRANCH}" \
+               --title "${TITLE}" \
+               --body-file "${body}" 2> "${error}"; then
+            exit 0
+          fi
+          cat "${error}" >&2
+
+          # Unless the repository allows it, GITHUB_TOKEN may push but not open
+          # PRs. As in the Bump workflow, hand over a prefilled link instead of
+          # failing; the next scheduled run pushes and links again until a PR
+          # is open.
+          if ! grep --quiet 'not permitted to create or approve pull requests' "${error}"; then
+            exit 1
+          fi
+          url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/compare/${GITHUB_REF_NAME}...${BRANCH}?quick_pull=1"
+          url+="&title=$(jq --raw-input --raw-output '@uri' <<< "${TITLE}")"
+          url+="&body=$(jq --raw-input --raw-output --slurp '@uri' < "${body}")"
+          echo "::warning::GitHub Actions may not open PRs in this repository." \
+               "${BRANCH} is pushed; open its PR from the link in the job summary." \
+               "See RELEASING.md to let the workflow open it next time."
+          {
+            echo "### Open the update PR"
+            echo
+            echo "GitHub Actions is not permitted to create pull requests here," \
+                 "so \`${BRANCH}\` was pushed but no PR was opened."
+            echo
+            echo "**[Open the PR for \`${BRANCH}\`](${url})** — title and body are prefilled."
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Report a dry run
+        if: ${{ steps.apply.outputs.update == 'true' && inputs.dry_run }}
+        run: |
+          echo "::notice::Dry run: would push ${BRANCH} and open a PR." \
+               "The diff is in the job summary."
